@@ -1,0 +1,10 @@
+package com.ucc.convenios.shared.enums;
+
+public enum ReviewAlertType {
+    PRIMER_RECORDATORIO,
+    SEGUNDO_RECORDATORIO,
+    ULTIMO_RECORDATORIO,
+    REVISION_VENCIDA,
+    INCIDENCIA_REGISTRADA,
+    LIMITE_INCIDENCIAS_ALCANZADO
+}
