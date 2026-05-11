@@ -1,5 +1,6 @@
 package com.ucc.convenios.convenios.dto;
 
+import com.ucc.convenios.shared.enums.ConvenioType;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -13,6 +14,9 @@ public class CreateConvenioRequest {
 
     @NotNull(message = "La empresa es obligatoria")
     private UUID companyId;
+
+    @NotNull(message = "El tipo de convenio es obligatorio")
+    private ConvenioType convenioType;
 
     @NotBlank(message = "El título del convenio es obligatorio")
     @Size(max = 200, message = "El título no puede superar 200 caracteres")
@@ -45,6 +49,14 @@ public class CreateConvenioRequest {
 
     public void setCompanyId(UUID companyId) {
         this.companyId = companyId;
+    }
+
+    public ConvenioType getConvenioType() {
+        return convenioType;
+    }
+
+    public void setConvenioType(ConvenioType convenioType) {
+        this.convenioType = convenioType;
     }
 
     public String getTitle() {

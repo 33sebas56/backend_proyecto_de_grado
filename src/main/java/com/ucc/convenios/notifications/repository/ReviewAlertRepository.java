@@ -3,6 +3,7 @@ package com.ucc.convenios.notifications.repository;
 import com.ucc.convenios.notifications.entity.ReviewAlert;
 import com.ucc.convenios.shared.enums.ReviewAlertAudience;
 import com.ucc.convenios.users.entity.User;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -15,8 +16,17 @@ public interface ReviewAlertRepository extends JpaRepository<ReviewAlert, UUID> 
     List<ReviewAlert> findByRecipientUserOrderByCreatedAtDesc(User recipientUser);
 
     @EntityGraph(attributePaths = {"approvalStep", "convenio", "recipientUser"})
+    List<ReviewAlert> findByRecipientUserOrderByCreatedAtDesc(User recipientUser, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"approvalStep", "convenio", "recipientUser"})
     List<ReviewAlert> findByAudienceOrderByCreatedAtDesc(ReviewAlertAudience audience);
 
     @EntityGraph(attributePaths = {"approvalStep", "convenio", "recipientUser"})
     List<ReviewAlert> findAllByOrderByCreatedAtDesc();
+
+    long countByRecipientUser(User recipientUser);
+
+    long countByRecipientUserAndReadAtIsNull(User recipientUser);
+
+    long countByReadAtIsNull();
 }

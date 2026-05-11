@@ -18,5 +18,8 @@ public interface ReviewerProfileRepository extends JpaRepository<ReviewerProfile
     @EntityGraph(attributePaths = {"user", "role"})
     Optional<ReviewerProfile> findByUserAndRole(User user, Role role);
 
+    @EntityGraph(attributePaths = {"user", "role"})
+    List<ReviewerProfile> findByUser(User user);
+
     boolean existsByUserAndRole(User user, Role role);
 }

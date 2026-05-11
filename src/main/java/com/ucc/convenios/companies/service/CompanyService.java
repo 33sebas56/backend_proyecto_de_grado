@@ -43,6 +43,7 @@ public class CompanyService {
         User currentUser = getCurrentUser(authentication);
 
         String normalizedNit = normalizeNit(request.getNit());
+        String normalizedContactEmail = normalizeEmail(request.getContactEmail());
 
         if (companyRepository.existsByNit(normalizedNit)) {
             throw new BadRequestException("Ya existe una empresa registrada con este NIT");
@@ -58,7 +59,7 @@ public class CompanyService {
                         : request.getIdentificationType()
         );
         company.setLegalRepresentativeName(request.getLegalRepresentativeName());
-        company.setContactEmail(request.getContactEmail());
+        company.setContactEmail(normalizedContactEmail);
         company.setContactPhone(request.getContactPhone());
         company.setAddress(request.getAddress());
         company.setStatus(CompanyStatus.BORRADOR);
@@ -117,6 +118,10 @@ public class CompanyService {
             throw new BadRequestException("La empresa no se puede enviar a validación desde su estado actual");
         }
 
+        if (company.getContactEmail() == null || company.getContactEmail().isBlank()) {
+            throw new BadRequestException("La empresa debe tener correo de contacto antes de enviarse a validación");
+        }
+
         CompanyStatus previousStatus = company.getStatus();
 
         company.setStatus(CompanyStatus.PENDIENTE_VALIDACION);
@@ -145,6 +150,10 @@ public class CompanyService {
 
         if (company.getStatus() != CompanyStatus.PENDIENTE_VALIDACION) {
             throw new BadRequestException("Solo se pueden validar empresas pendientes de validación");
+        }
+
+        if (company.getContactEmail() == null || company.getContactEmail().isBlank()) {
+            throw new BadRequestException("La empresa no puede validarse sin correo de contacto");
         }
 
         CompanyStatus previousStatus = company.getStatus();
@@ -275,6 +284,14 @@ public class CompanyService {
 
     private String normalizeNit(String nit) {
         return nit.trim().toUpperCase();
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException("El correo de contacto de la empresa es obligatorio");
+        }
+
+        return email.trim().toLowerCase();
     }
 
     private String normalizeComment(String comment, String defaultComment) {

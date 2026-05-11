@@ -15,6 +15,7 @@ import com.ucc.convenios.convenios.repository.ConvenioRepository;
 import com.ucc.convenios.convenios.repository.ConvenioStatusHistoryRepository;
 import com.ucc.convenios.convenios.repository.ConvenioVersionRepository;
 import com.ucc.convenios.convenios.service.ConvenioDocumentService;
+import com.ucc.convenios.notifications.service.ConvenioNotificationService;
 import com.ucc.convenios.roles.entity.Role;
 import com.ucc.convenios.roles.repository.RoleRepository;
 import com.ucc.convenios.shared.enums.ApprovalRoundStatus;
@@ -52,6 +53,7 @@ public class ApprovalService {
     private final ConvenioDocumentService convenioDocumentService;
     private final RoleRepository roleRepository;
     private final ReviewerProfileRepository reviewerProfileRepository;
+    private final ConvenioNotificationService convenioNotificationService;
 
     public ApprovalService(
             ApprovalRoundRepository approvalRoundRepository,
@@ -63,7 +65,8 @@ public class ApprovalService {
             UserRepository userRepository,
             ConvenioDocumentService convenioDocumentService,
             RoleRepository roleRepository,
-            ReviewerProfileRepository reviewerProfileRepository
+            ReviewerProfileRepository reviewerProfileRepository,
+            ConvenioNotificationService convenioNotificationService
     ) {
         this.approvalRoundRepository = approvalRoundRepository;
         this.approvalStepRepository = approvalStepRepository;
@@ -75,10 +78,15 @@ public class ApprovalService {
         this.convenioDocumentService = convenioDocumentService;
         this.roleRepository = roleRepository;
         this.reviewerProfileRepository = reviewerProfileRepository;
+        this.convenioNotificationService = convenioNotificationService;
     }
 
     @Transactional
-    public ApprovalRound createInitialApprovalRound(Convenio convenio, ConvenioVersion convenioVersion) {
+    public ApprovalRound createInitialApprovalRound(
+            Convenio convenio,
+            ConvenioVersion convenioVersion,
+            ConvenioStage firstStage
+    ) {
         int roundNumber = getNextRoundNumber(convenio);
 
         ApprovalRound round = new ApprovalRound();
@@ -89,7 +97,7 @@ public class ApprovalService {
 
         ApprovalRound savedRound = approvalRoundRepository.save(round);
 
-        createStep(savedRound, ConvenioStage.PROYECCION);
+        createStep(savedRound, firstStage);
 
         return savedRound;
     }
@@ -228,6 +236,7 @@ public class ApprovalService {
 
         convenio.setCurrentStatus(ConvenioStatus.EN_REVISION);
         convenio.setCurrentStage(nextStage);
+
         Convenio savedConvenio = convenioRepository.save(convenio);
 
         registerStatusHistory(
@@ -364,7 +373,10 @@ public class ApprovalService {
             throw new BadRequestException("Ya existe una etapa de aprobación para " + stage.name());
         }
 
-        User assignedUser = approvalAssignmentService.assignReviewerForStage(stage);
+        User assignedUser = approvalAssignmentService.assignReviewerForStage(
+                stage,
+                round.getConvenio().getConvenioType()
+        );
 
         ApprovalStep step = new ApprovalStep();
         step.setApprovalRound(round);
@@ -375,7 +387,11 @@ public class ApprovalService {
         step.setAssignedAt(LocalDateTime.now());
         step.setDueAt(LocalDateTime.now().plusDays(7));
 
-        return approvalStepRepository.save(step);
+        ApprovalStep savedStep = approvalStepRepository.save(step);
+
+        convenioNotificationService.notifyReviewerAssigned(savedStep);
+
+        return savedStep;
     }
 
     private void validateStepCanBeAnswered(ApprovalStep step, User currentUser) {
@@ -405,8 +421,7 @@ public class ApprovalService {
 
         return switch (currentStage) {
             case PROYECCION -> ConvenioStage.JURIDICA;
-            case JURIDICA -> ConvenioStage.FINANCIERA;
-            case FINANCIERA -> ConvenioStage.RECTORIA;
+            case JURIDICA -> ConvenioStage.RECTORIA;
             case RECTORIA -> null;
         };
     }
@@ -415,14 +430,19 @@ public class ApprovalService {
         return switch (stage) {
             case PROYECCION -> 1;
             case JURIDICA -> 2;
-            case FINANCIERA -> 3;
-            case RECTORIA -> 4;
+            case RECTORIA -> 3;
         };
     }
 
     private String generateApprovalCode(ApprovalStep step) {
         String year = String.valueOf(Year.now().getValue());
-        return "APR-" + step.getStage().name() + "-" + year + "-" + step.getId().toString().substring(0, 8).toUpperCase();
+
+        return "APR-"
+                + step.getStage().name()
+                + "-"
+                + year
+                + "-"
+                + step.getId().toString().substring(0, 8).toUpperCase();
     }
 
     private String generateSealText(ApprovalStep step, User user) {
@@ -437,19 +457,34 @@ public class ApprovalService {
     }
 
     private String getReviewerSealName(User user, ConvenioStage stage) {
-        String roleName = getRoleNameForStage(stage);
+        List<String> roleNames = getCandidateRoleNamesForStage(stage);
 
-        Role role = roleRepository.findByName(roleName)
-                .orElse(null);
+        for (String roleName : roleNames) {
+            Role role = roleRepository.findByName(roleName).orElse(null);
 
-        if (role == null) {
-            return generateDefaultSealName(user.getFullName());
+            if (role == null) {
+                continue;
+            }
+
+            String sealName = reviewerProfileRepository.findByUserAndRole(user, role)
+                    .map(ReviewerProfile::getSealName)
+                    .filter(value -> value != null && !value.isBlank())
+                    .orElse(null);
+
+            if (sealName != null) {
+                return sealName;
+            }
         }
 
-        return reviewerProfileRepository.findByUserAndRole(user, role)
-                .map(ReviewerProfile::getSealName)
-                .filter(sealName -> sealName != null && !sealName.isBlank())
-                .orElse(generateDefaultSealName(user.getFullName()));
+        return generateDefaultSealName(user.getFullName());
+    }
+
+    private List<String> getCandidateRoleNamesForStage(ConvenioStage stage) {
+        return switch (stage) {
+            case PROYECCION -> List.of("GESTOR_PROYECCION");
+            case JURIDICA -> List.of("REVISOR_JURIDICO");
+            case RECTORIA -> List.of("RECTORIA", "RECTOR_MEDELLIN");
+        };
     }
 
     private String generateDefaultSealName(String fullName) {
@@ -477,15 +512,6 @@ public class ApprovalService {
         String lower = value.toLowerCase();
 
         return lower.substring(0, 1).toUpperCase() + lower.substring(1);
-    }
-
-    private String getRoleNameForStage(ConvenioStage stage) {
-        return switch (stage) {
-            case PROYECCION -> "GESTOR_PROYECCION";
-            case JURIDICA -> "REVISOR_JURIDICO";
-            case FINANCIERA -> "REVISOR_FINANCIERO";
-            case RECTORIA -> "RECTORIA";
-        };
     }
 
     private ApprovalStep getStepWithDetails(UUID stepId) {

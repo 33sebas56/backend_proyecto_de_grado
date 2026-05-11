@@ -17,6 +17,7 @@ public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID
     @EntityGraph(attributePaths = {
             "approvalRound",
             "approvalRound.convenio",
+            "approvalRound.convenio.company",
             "approvalRound.convenio.createdBy",
             "approvalRound.convenioVersion",
             "assignedUser"
@@ -26,6 +27,7 @@ public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID
     @EntityGraph(attributePaths = {
             "approvalRound",
             "approvalRound.convenio",
+            "approvalRound.convenio.company",
             "approvalRound.convenio.createdBy",
             "approvalRound.convenioVersion",
             "assignedUser"
@@ -38,6 +40,7 @@ public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID
     @EntityGraph(attributePaths = {
             "approvalRound",
             "approvalRound.convenio",
+            "approvalRound.convenio.company",
             "approvalRound.convenio.createdBy",
             "approvalRound.convenioVersion",
             "assignedUser"
@@ -47,11 +50,16 @@ public interface ApprovalStepRepository extends JpaRepository<ApprovalStep, UUID
     @EntityGraph(attributePaths = {
             "approvalRound",
             "approvalRound.convenio",
+            "approvalRound.convenio.company",
             "approvalRound.convenio.createdBy",
             "approvalRound.convenioVersion",
             "assignedUser"
     })
     List<ApprovalStep> findByApprovalRoundOrderByStageOrderAsc(ApprovalRound approvalRound);
+
+    long countByStatus(ApprovalStepStatus status);
+
+    long countByAssignedUserAndStatus(User assignedUser, ApprovalStepStatus status);
 
     Optional<ApprovalStep> findByApprovalRoundAndStage(ApprovalRound approvalRound, ConvenioStage stage);
 

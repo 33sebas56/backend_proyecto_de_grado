@@ -14,6 +14,7 @@ import com.ucc.convenios.approvals.entity.ApprovalStep;
 import com.ucc.convenios.convenios.entity.Convenio;
 import com.ucc.convenios.convenios.entity.ConvenioVersion;
 import com.ucc.convenios.shared.enums.ConvenioGeneratedDocumentType;
+import com.ucc.convenios.shared.enums.ConvenioType;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -134,7 +135,7 @@ public class PdfGenerationService {
 
             if (includeApprovalPage) {
                 document.newPage();
-                addApprovalPage(document, approvalSteps);
+                addApprovalPage(document, convenio, approvalSteps);
             }
 
             document.close();
@@ -174,6 +175,8 @@ public class PdfGenerationService {
         addRow(table, "Código del convenio", convenio.getCode());
         addRow(table, "Empresa", convenio.getCompany().getBusinessName());
         addRow(table, "NIT", convenio.getCompany().getNit());
+        addRow(table, "Tipo de convenio", getConvenioTypeLabel(convenio));
+        addRow(table, "Firmante de rectoría", convenio.getRectorSignerLabel());
         addRow(table, "Título", version.getTitle());
         addRow(table, "Versión", String.valueOf(version.getVersionNumber()));
         addRow(table, "Duración", version.getDurationMonths() == null ? "No especificada" : version.getDurationMonths() + " meses");
@@ -202,7 +205,7 @@ public class PdfGenerationService {
         document.add(sectionContent);
     }
 
-    private void addApprovalPage(Document document, List<ApprovalStep> approvalSteps) throws Exception {
+    private void addApprovalPage(Document document, Convenio convenio, List<ApprovalStep> approvalSteps) throws Exception {
         addInstitutionalHeader(document, "CONSTANCIAS DE REVISIÓN INTERNA");
 
         PdfPTable table = new PdfPTable(4);
@@ -223,6 +226,8 @@ public class PdfGenerationService {
         }
 
         document.add(table);
+
+        addSection(document, "Regla de firma de Rectoría", buildRectorSignerNote(convenio));
 
         Paragraph note = new Paragraph(
                 "Este documento contiene las constancias internas de revisión registradas por el sistema. " +
@@ -258,7 +263,7 @@ public class PdfGenerationService {
 
     private void addValueCell(PdfPTable table, String text) {
         Font font = new Font(Font.HELVETICA, 10, Font.NORMAL);
-        PdfPCell cell = new PdfPCell(new Phrase(text, font));
+        PdfPCell cell = new PdfPCell(new Phrase(text == null ? "" : text, font));
         cell.setPadding(6);
         cell.setBorder(Rectangle.BOX);
         table.addCell(cell);
@@ -277,6 +282,20 @@ public class PdfGenerationService {
         PdfPCell cell = new PdfPCell(new Phrase(text == null ? "" : text, font));
         cell.setPadding(6);
         table.addCell(cell);
+    }
+
+    private String getConvenioTypeLabel(Convenio convenio) {
+        ConvenioType type = convenio.getConvenioType() == null
+                ? ConvenioType.MARCO
+                : convenio.getConvenioType();
+
+        return type.getDisplayName();
+    }
+
+    private String buildRectorSignerNote(Convenio convenio) {
+        return "Según el tipo de convenio registrado, el firmante final correspondiente en Rectoría es: "
+                + convenio.getRectorSignerLabel()
+                + ". Esta regla se deriva del tipo de convenio seleccionado al crear el registro.";
     }
 
     private String formatMoney(ConvenioVersion version) {

@@ -36,16 +36,49 @@ public class LocalFileStorageService {
         return writeFile(directory, filePath, fileBytes);
     }
 
+    public Path saveCompanySubmittedDocument(
+            UUID convenioId,
+            UUID requestId,
+            String originalFilename,
+            byte[] fileBytes
+    ) {
+        String safeOriginalFilename = sanitizeFilename(originalFilename);
+        String storedFilename = UUID.randomUUID() + "-" + safeOriginalFilename;
+
+        Path directory = Path.of(
+                basePath,
+                "convenios",
+                "company-documents",
+                convenioId.toString(),
+                requestId.toString()
+        );
+
+        Path filePath = directory.resolve(storedFilename);
+        return writeFile(directory, filePath, fileBytes);
+    }
+
     public byte[] readFile(String storagePath) {
         try {
             return Files.readAllBytes(Path.of(storagePath));
         } catch (IOException exception) {
-            throw new BadRequestException("No se pudo leer el archivo PDF");
+            throw new BadRequestException("No se pudo leer el archivo");
         }
     }
 
     public boolean exists(String storagePath) {
         return Files.exists(Path.of(storagePath));
+    }
+
+    public void deleteFileIfExists(String storagePath) {
+        if (storagePath == null || storagePath.isBlank()) {
+            return;
+        }
+
+        try {
+            Files.deleteIfExists(Path.of(storagePath));
+        } catch (IOException exception) {
+            throw new BadRequestException("No se pudo eliminar el archivo físico");
+        }
     }
 
     private Path writeFile(Path directory, Path filePath, byte[] fileBytes) {
@@ -54,7 +87,17 @@ public class LocalFileStorageService {
             Files.write(filePath, fileBytes);
             return filePath;
         } catch (IOException exception) {
-            throw new BadRequestException("No se pudo guardar el archivo PDF");
+            throw new BadRequestException("No se pudo guardar el archivo");
         }
+    }
+
+    private String sanitizeFilename(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "documento";
+        }
+
+        return filename
+                .trim()
+                .replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 }

@@ -23,6 +23,7 @@ public class CreateCompanyRequest {
     @Size(max = 150, message = "El representante legal no puede superar 150 caracteres")
     private String legalRepresentativeName;
 
+    @NotBlank(message = "El correo de contacto de la empresa es obligatorio")
     @Email(message = "El correo de contacto no tiene un formato válido")
     @Size(max = 180, message = "El correo de contacto no puede superar 180 caracteres")
     private String contactEmail;

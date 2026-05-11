@@ -1,17 +1,30 @@
 package com.ucc.convenios.convenios.service;
 
+import com.ucc.convenios.approvals.service.ApprovalService;
 import com.ucc.convenios.companies.entity.Company;
 import com.ucc.convenios.companies.repository.CompanyRepository;
-import com.ucc.convenios.convenios.dto.*;
+import com.ucc.convenios.companydocuments.service.CompanyDocumentWorkflowService;
+import com.ucc.convenios.convenios.dto.ConvenioGeneratedDocumentResponse;
+import com.ucc.convenios.convenios.dto.ConvenioResponse;
+import com.ucc.convenios.convenios.dto.ConvenioStatusHistoryResponse;
+import com.ucc.convenios.convenios.dto.ConvenioVersionResponse;
+import com.ucc.convenios.convenios.dto.CreateConvenioRequest;
 import com.ucc.convenios.convenios.entity.Convenio;
+import com.ucc.convenios.convenios.entity.ConvenioGeneratedDocument;
 import com.ucc.convenios.convenios.entity.ConvenioStatusHistory;
 import com.ucc.convenios.convenios.entity.ConvenioVersion;
 import com.ucc.convenios.convenios.repository.ConvenioRepository;
 import com.ucc.convenios.convenios.repository.ConvenioStatusHistoryRepository;
 import com.ucc.convenios.convenios.repository.ConvenioVersionRepository;
+import com.ucc.convenios.documents.pdf.PdfGenerationService;
+import com.ucc.convenios.documents.storage.LocalFileStorageService;
+import com.ucc.convenios.roles.entity.Role;
+import com.ucc.convenios.roles.entity.UserRole;
+import com.ucc.convenios.roles.repository.UserRoleRepository;
 import com.ucc.convenios.shared.enums.CompanyStatus;
 import com.ucc.convenios.shared.enums.ConvenioStage;
 import com.ucc.convenios.shared.enums.ConvenioStatus;
+import com.ucc.convenios.shared.enums.ConvenioType;
 import com.ucc.convenios.shared.enums.ConvenioVersionReason;
 import com.ucc.convenios.shared.enums.ConvenioVersionStatus;
 import com.ucc.convenios.shared.exceptions.BadRequestException;
@@ -21,15 +34,11 @@ import com.ucc.convenios.users.repository.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.ucc.convenios.approvals.service.ApprovalService;
-import com.ucc.convenios.documents.pdf.PdfGenerationService;
-import com.ucc.convenios.documents.storage.LocalFileStorageService;
-import com.ucc.convenios.convenios.entity.ConvenioGeneratedDocument;
-import java.nio.file.Path;
-import com.ucc.convenios.convenios.dto.ConvenioGeneratedDocumentResponse;
 
+import java.nio.file.Path;
 import java.time.Year;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -40,10 +49,12 @@ public class ConvenioService {
     private final ConvenioStatusHistoryRepository convenioStatusHistoryRepository;
     private final CompanyRepository companyRepository;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
     private final ApprovalService approvalService;
     private final PdfGenerationService pdfGenerationService;
     private final LocalFileStorageService localFileStorageService;
     private final ConvenioDocumentService convenioDocumentService;
+    private final CompanyDocumentWorkflowService companyDocumentWorkflowService;
 
     public ConvenioService(
             ConvenioRepository convenioRepository,
@@ -51,25 +62,30 @@ public class ConvenioService {
             ConvenioStatusHistoryRepository convenioStatusHistoryRepository,
             CompanyRepository companyRepository,
             UserRepository userRepository,
+            UserRoleRepository userRoleRepository,
             ApprovalService approvalService,
             PdfGenerationService pdfGenerationService,
             LocalFileStorageService localFileStorageService,
-            ConvenioDocumentService convenioDocumentService
+            ConvenioDocumentService convenioDocumentService,
+            CompanyDocumentWorkflowService companyDocumentWorkflowService
     ) {
         this.convenioRepository = convenioRepository;
         this.convenioVersionRepository = convenioVersionRepository;
         this.convenioStatusHistoryRepository = convenioStatusHistoryRepository;
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
+        this.userRoleRepository = userRoleRepository;
         this.approvalService = approvalService;
         this.pdfGenerationService = pdfGenerationService;
         this.localFileStorageService = localFileStorageService;
         this.convenioDocumentService = convenioDocumentService;
+        this.companyDocumentWorkflowService = companyDocumentWorkflowService;
     }
 
     @Transactional
     public ConvenioResponse createConvenio(CreateConvenioRequest request, Authentication authentication) {
         User currentUser = getCurrentUser(authentication);
+        validateCanCreateConvenio(currentUser);
 
         Company company = companyRepository.findById(request.getCompanyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa no encontrada"));
@@ -78,10 +94,15 @@ public class ConvenioService {
             throw new BadRequestException("Solo se pueden crear convenios con empresas validadas");
         }
 
+        ConvenioType convenioType = request.getConvenioType() == null
+                ? ConvenioType.MARCO
+                : request.getConvenioType();
+
         Convenio convenio = new Convenio();
         convenio.setCode(generateConvenioCode());
         convenio.setCompany(company);
         convenio.setCreatedBy(currentUser);
+        convenio.setConvenioType(convenioType);
         convenio.setCurrentStatus(ConvenioStatus.BORRADOR);
         convenio.setStartDate(request.getStartDate());
         convenio.setEndDate(request.getEndDate());
@@ -115,7 +136,8 @@ public class ConvenioService {
                 ConvenioStatus.BORRADOR,
                 null,
                 null,
-                "Convenio creado en estado borrador",
+                "Convenio creado en estado borrador. Tipo: " + convenioType.getDisplayName()
+                        + ". Firmante de rectoría: " + convenioType.getRectorSignerLabel(),
                 currentUser
         );
 
@@ -161,9 +183,13 @@ public class ConvenioService {
         User currentUser = getCurrentUser(authentication);
         Convenio convenio = getConvenioWithDetails(convenioId);
 
-        if (convenio.getCurrentStatus() != ConvenioStatus.BORRADOR &&
+        if (convenio.getCurrentStatus() != ConvenioStatus.LISTO_PARA_RADICAR &&
                 convenio.getCurrentStatus() != ConvenioStatus.EN_CORRECCION) {
-            throw new BadRequestException("El convenio no se puede radicar desde su estado actual");
+            throw new BadRequestException("El convenio solo se puede radicar cuando esté LISTO_PARA_RADICAR o en corrección formal");
+        }
+
+        if (!companyDocumentWorkflowService.hasApprovedCompanyDocuments(convenio)) {
+            throw new BadRequestException("No se puede radicar: faltan documentos de empresa aprobados");
         }
 
         ConvenioVersion currentVersion = convenio.getCurrentVersion();
@@ -186,8 +212,10 @@ public class ConvenioService {
         ConvenioStatus previousStatus = convenio.getCurrentStatus();
         ConvenioStage previousStage = convenio.getCurrentStage();
 
+        ConvenioStage firstStage = resolveFirstFormalStage(convenio.getCreatedBy());
+
         convenio.setCurrentStatus(ConvenioStatus.RADICADO);
-        convenio.setCurrentStage(ConvenioStage.PROYECCION);
+        convenio.setCurrentStage(firstStage);
 
         Convenio savedConvenio = convenioRepository.save(convenio);
 
@@ -196,15 +224,16 @@ public class ConvenioService {
                 previousStatus,
                 ConvenioStatus.RADICADO,
                 previousStage,
-                ConvenioStage.PROYECCION,
-                "Convenio radicado, PDF oficial generado y enviado a Proyección Social",
+                firstStage,
+                buildSubmitHistoryComment(savedConvenio, firstStage),
                 currentUser
         );
 
-        approvalService.createInitialApprovalRound(savedConvenio, currentVersion);
+        approvalService.createInitialApprovalRound(savedConvenio, currentVersion, firstStage);
 
         return ConvenioResponse.fromEntity(savedConvenio);
     }
+
     @Transactional
     public String generatePreviewPdf(UUID convenioId, Authentication authentication) {
         getCurrentUser(authentication);
@@ -270,6 +299,46 @@ public class ConvenioService {
         }
 
         return localFileStorageService.readFile(version.getGeneratedPdfStoragePath());
+    }
+
+    private void validateCanCreateConvenio(User user) {
+        Set<String> allowedRoles = Set.of("ADMIN", "PROFESOR", "GESTOR_PROYECCION");
+
+        boolean allowed = userRoleRepository.findByUser(user)
+                .stream()
+                .map(UserRole::getRole)
+                .map(Role::getName)
+                .anyMatch(allowedRoles::contains);
+
+        if (!allowed) {
+            throw new BadRequestException("Solo ADMIN, PROFESOR o GESTOR_PROYECCION pueden crear convenios");
+        }
+    }
+
+    private ConvenioStage resolveFirstFormalStage(User creator) {
+        boolean createdByProjection = userRoleRepository.findByUser(creator)
+                .stream()
+                .map(UserRole::getRole)
+                .map(Role::getName)
+                .anyMatch("GESTOR_PROYECCION"::equals);
+
+        if (createdByProjection) {
+            return ConvenioStage.JURIDICA;
+        }
+
+        return ConvenioStage.PROYECCION;
+    }
+
+    private String buildSubmitHistoryComment(Convenio convenio, ConvenioStage firstStage) {
+        String rectorSignerLabel = convenio.getRectorSignerLabel();
+
+        if (firstStage == ConvenioStage.JURIDICA) {
+            return "Convenio radicado por Proyección Social, PDF oficial generado y enviado a Jurídica. "
+                    + "Firmante final esperado en Rectoría: " + rectorSignerLabel;
+        }
+
+        return "Convenio radicado, PDF oficial generado y enviado a Proyección Social. "
+                + "Firmante final esperado en Rectoría: " + rectorSignerLabel;
     }
 
     private void registerStatusHistory(

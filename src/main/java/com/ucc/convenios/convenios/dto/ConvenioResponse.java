@@ -1,6 +1,7 @@
 package com.ucc.convenios.convenios.dto;
 
 import com.ucc.convenios.convenios.entity.Convenio;
+import com.ucc.convenios.shared.enums.ConvenioType;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -16,6 +17,9 @@ public class ConvenioResponse {
     private UUID createdById;
     private String currentStatus;
     private String currentStage;
+    private String convenioType;
+    private String convenioTypeLabel;
+    private String rectorSignerLabel;
     private UUID currentVersionId;
     private LocalDate startDate;
     private LocalDate endDate;
@@ -36,6 +40,14 @@ public class ConvenioResponse {
         response.setCreatedById(convenio.getCreatedBy().getId());
         response.setCurrentStatus(convenio.getCurrentStatus().name());
         response.setRevisionIssueCount(convenio.getRevisionIssueCount());
+
+        ConvenioType type = convenio.getConvenioType() == null
+                ? ConvenioType.MARCO
+                : convenio.getConvenioType();
+
+        response.setConvenioType(type.name());
+        response.setConvenioTypeLabel(type.getDisplayName());
+        response.setRectorSignerLabel(type.getRectorSignerLabel());
 
         if (convenio.getCurrentStage() != null) {
             response.setCurrentStage(convenio.getCurrentStage().name());
@@ -117,6 +129,30 @@ public class ConvenioResponse {
         this.currentStage = currentStage;
     }
 
+    public String getConvenioType() {
+        return convenioType;
+    }
+
+    public void setConvenioType(String convenioType) {
+        this.convenioType = convenioType;
+    }
+
+    public String getConvenioTypeLabel() {
+        return convenioTypeLabel;
+    }
+
+    public void setConvenioTypeLabel(String convenioTypeLabel) {
+        this.convenioTypeLabel = convenioTypeLabel;
+    }
+
+    public String getRectorSignerLabel() {
+        return rectorSignerLabel;
+    }
+
+    public void setRectorSignerLabel(String rectorSignerLabel) {
+        this.rectorSignerLabel = rectorSignerLabel;
+    }
+
     public UUID getCurrentVersionId() {
         return currentVersionId;
     }
@@ -156,6 +192,7 @@ public class ConvenioResponse {
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
+
     public Integer getRevisionIssueCount() {
         return revisionIssueCount;
     }

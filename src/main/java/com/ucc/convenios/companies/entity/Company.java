@@ -30,7 +30,7 @@ public class Company {
     @Column(name = "legal_representative_name", length = 150)
     private String legalRepresentativeName;
 
-    @Column(name = "contact_email", length = 180)
+    @Column(name = "contact_email", nullable = false, length = 180)
     private String contactEmail;
 
     @Column(name = "contact_phone", length = 50)
@@ -88,7 +88,7 @@ public class Company {
 
     private void normalizeFields() {
         if (this.nit != null) {
-            this.nit = this.nit.trim();
+            this.nit = this.nit.trim().toUpperCase();
         }
 
         if (this.contactEmail != null) {

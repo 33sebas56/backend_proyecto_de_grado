@@ -15,4 +15,6 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
     boolean existsByNit(String nit);
 
     List<Company> findByStatus(CompanyStatus status);
+
+    long countByStatus(CompanyStatus status);
 }

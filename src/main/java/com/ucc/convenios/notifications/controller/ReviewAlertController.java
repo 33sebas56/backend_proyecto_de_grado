@@ -2,12 +2,14 @@ package com.ucc.convenios.notifications.controller;
 
 import com.ucc.convenios.approvals.service.ApprovalDeadlineService;
 import com.ucc.convenios.notifications.dto.ReviewAlertResponse;
+import com.ucc.convenios.notifications.dto.UnreadAlertCountResponse;
 import com.ucc.convenios.notifications.service.ReviewAlertService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/review-alerts")
@@ -27,6 +29,24 @@ public class ReviewAlertController {
     @GetMapping("/me")
     public List<ReviewAlertResponse> findMyAlerts(Authentication authentication) {
         return reviewAlertService.findMyAlerts(authentication);
+    }
+
+    @GetMapping("/unread-count")
+    public UnreadAlertCountResponse countMyUnreadAlerts(Authentication authentication) {
+        return reviewAlertService.countMyUnreadAlerts(authentication);
+    }
+
+    @PostMapping("/{alertId}/read")
+    public ReviewAlertResponse markAlertAsRead(
+            @PathVariable UUID alertId,
+            Authentication authentication
+    ) {
+        return reviewAlertService.markAlertAsRead(alertId, authentication);
+    }
+
+    @PostMapping("/read-all")
+    public UnreadAlertCountResponse markAllMyAlertsAsRead(Authentication authentication) {
+        return reviewAlertService.markAllMyAlertsAsRead(authentication);
     }
 
     @GetMapping("/admin")

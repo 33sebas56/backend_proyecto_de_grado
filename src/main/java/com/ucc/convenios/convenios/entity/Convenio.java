@@ -3,6 +3,7 @@ package com.ucc.convenios.convenios.entity;
 import com.ucc.convenios.companies.entity.Company;
 import com.ucc.convenios.shared.enums.ConvenioStage;
 import com.ucc.convenios.shared.enums.ConvenioStatus;
+import com.ucc.convenios.shared.enums.ConvenioType;
 import com.ucc.convenios.users.entity.User;
 import jakarta.persistence.*;
 
@@ -37,6 +38,10 @@ public class Convenio {
     @Column(name = "current_stage", length = 40)
     private ConvenioStage currentStage;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "convenio_type", nullable = false, length = 40)
+    private ConvenioType convenioType = ConvenioType.MARCO;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "current_version_id")
     private ConvenioVersion currentVersion;
@@ -69,6 +74,10 @@ public class Convenio {
             this.currentStatus = ConvenioStatus.BORRADOR;
         }
 
+        if (this.convenioType == null) {
+            this.convenioType = ConvenioType.MARCO;
+        }
+
         if (this.revisionIssueCount == null) {
             this.revisionIssueCount = 0;
         }
@@ -77,6 +86,10 @@ public class Convenio {
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
+
+        if (this.convenioType == null) {
+            this.convenioType = ConvenioType.MARCO;
+        }
 
         if (this.revisionIssueCount == null) {
             this.revisionIssueCount = 0;
@@ -129,6 +142,22 @@ public class Convenio {
 
     public void setCurrentStage(ConvenioStage currentStage) {
         this.currentStage = currentStage;
+    }
+
+    public ConvenioType getConvenioType() {
+        return convenioType;
+    }
+
+    public void setConvenioType(ConvenioType convenioType) {
+        this.convenioType = convenioType;
+    }
+
+    public String getRectorSignerLabel() {
+        if (this.convenioType == null) {
+            return ConvenioType.MARCO.getRectorSignerLabel();
+        }
+
+        return this.convenioType.getRectorSignerLabel();
     }
 
     public ConvenioVersion getCurrentVersion() {

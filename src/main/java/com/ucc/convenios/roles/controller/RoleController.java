@@ -30,4 +30,10 @@ public class RoleController {
     public void assignRole(@Valid @RequestBody AssignRoleRequest request) {
         roleService.assignRoleToUser(request.getEmail(), request.getRoleName());
     }
+
+    @PostMapping("/remove")
+    @PreAuthorize("hasRole('ADMIN')")
+    public void removeRole(@Valid @RequestBody AssignRoleRequest request) {
+        roleService.removeRoleFromUser(request.getEmail(), request.getRoleName());
+    }
 }

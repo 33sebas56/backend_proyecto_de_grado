@@ -5,6 +5,9 @@ import com.ucc.convenios.auth.dto.LoginRequest;
 import com.ucc.convenios.auth.dto.RegisterWithCodeRequest;
 import com.ucc.convenios.auth.security.CustomUserDetailsService;
 import com.ucc.convenios.auth.security.JwtService;
+import com.ucc.convenios.notifications.service.AppLinkService;
+import com.ucc.convenios.notifications.service.EmailTemplateService;
+import com.ucc.convenios.notifications.service.MailService;
 import com.ucc.convenios.roles.entity.Role;
 import com.ucc.convenios.roles.entity.UserRole;
 import com.ucc.convenios.roles.repository.RoleRepository;
@@ -16,6 +19,8 @@ import com.ucc.convenios.shared.exceptions.ResourceNotFoundException;
 import com.ucc.convenios.users.dto.UserResponse;
 import com.ucc.convenios.users.entity.User;
 import com.ucc.convenios.users.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +31,7 @@ import java.util.List;
 @Service
 public class AuthService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AuthService.class);
     private static final String INSTITUTIONAL_DOMAIN = "@campusucc.edu.co";
 
     private final UserRepository userRepository;
@@ -35,6 +41,9 @@ public class AuthService {
     private final JwtService jwtService;
     private final CustomUserDetailsService customUserDetailsService;
     private final EmailVerificationCodeService emailVerificationCodeService;
+    private final MailService mailService;
+    private final EmailTemplateService emailTemplateService;
+    private final AppLinkService appLinkService;
 
     public AuthService(
             UserRepository userRepository,
@@ -43,7 +52,10 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             CustomUserDetailsService customUserDetailsService,
-            EmailVerificationCodeService emailVerificationCodeService
+            EmailVerificationCodeService emailVerificationCodeService,
+            MailService mailService,
+            EmailTemplateService emailTemplateService,
+            AppLinkService appLinkService
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -52,6 +64,9 @@ public class AuthService {
         this.jwtService = jwtService;
         this.customUserDetailsService = customUserDetailsService;
         this.emailVerificationCodeService = emailVerificationCodeService;
+        this.mailService = mailService;
+        this.emailTemplateService = emailTemplateService;
+        this.appLinkService = appLinkService;
     }
 
     public AuthResponse register(RegisterWithCodeRequest request) {
@@ -82,6 +97,8 @@ public class AuthService {
         userRole.setUser(savedUser);
         userRole.setRole(defaultRole);
         userRoleRepository.save(userRole);
+
+        sendWelcomeEmail(savedUser);
 
         UserDetails userDetails = customUserDetailsService.loadUserByUsername(savedUser.getEmail());
         String token = jwtService.generateToken(userDetails);
@@ -120,7 +137,29 @@ public class AuthService {
         return new AuthResponse(token, userResponse);
     }
 
+    private void sendWelcomeEmail(User user) {
+        try {
+            String subject = emailTemplateService.buildWelcomeSubject();
+            String htmlBody = emailTemplateService.buildWelcomeHtml(
+                    user.getFullName(),
+                    appLinkService.buildSystemUrl()
+            );
+
+            mailService.sendHtmlEmail(user.getEmail(), subject, htmlBody);
+        } catch (Exception exception) {
+            LOGGER.warn(
+                    "No se pudo enviar el correo de bienvenida a {}. El registro se mantiene activo.",
+                    user.getEmail(),
+                    exception
+            );
+        }
+    }
+
     private String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new BadRequestException("El correo es obligatorio");
+        }
+
         return email.trim().toLowerCase();
     }
 
