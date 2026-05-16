@@ -2,6 +2,7 @@ package com.ucc.convenios.documents.storage;
 
 import com.ucc.convenios.shared.exceptions.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -10,36 +11,47 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 @Service
-public class LocalFileStorageService {
+@ConditionalOnProperty(name = "app.storage.provider", havingValue = "local", matchIfMissing = true)
+public class LocalFileStorageService implements FileStorageService {
 
     @Value("${app.storage.base-path:storage}")
     private String basePath;
 
-    public Path savePreviewPdf(UUID convenioId, byte[] fileBytes) {
+    @Override
+    public String getPreviewPdfStoragePath(UUID convenioId) {
+        return Path.of(basePath, "convenios", "previews", convenioId.toString(), "preview.pdf").toString();
+    }
+
+    @Override
+    public String savePreviewPdf(UUID convenioId, byte[] fileBytes) {
         Path directory = Path.of(basePath, "convenios", "previews", convenioId.toString());
         Path filePath = directory.resolve("preview.pdf");
 
-        return writeFile(directory, filePath, fileBytes);
+        return writeFile(directory, filePath, fileBytes).toString();
     }
 
-    public Path saveOfficialPdf(UUID convenioId, String fileName, byte[] fileBytes) {
+    @Override
+    public String saveOfficialPdf(UUID convenioId, String fileName, byte[] fileBytes) {
         Path directory = Path.of(basePath, "convenios", "official", convenioId.toString());
         Path filePath = directory.resolve(fileName);
 
-        return writeFile(directory, filePath, fileBytes);
+        return writeFile(directory, filePath, fileBytes).toString();
     }
 
-    public Path saveOfficialPdf(UUID convenioId, Integer versionNumber, byte[] fileBytes) {
+    @Override
+    public String saveOfficialPdf(UUID convenioId, Integer versionNumber, byte[] fileBytes) {
         Path directory = Path.of(basePath, "convenios", "official", convenioId.toString());
         Path filePath = directory.resolve("version-" + versionNumber + ".pdf");
 
-        return writeFile(directory, filePath, fileBytes);
+        return writeFile(directory, filePath, fileBytes).toString();
     }
 
-    public Path saveCompanySubmittedDocument(
+    @Override
+    public String saveCompanySubmittedDocument(
             UUID convenioId,
             UUID requestId,
             String originalFilename,
+            String contentType,
             byte[] fileBytes
     ) {
         String safeOriginalFilename = sanitizeFilename(originalFilename);
@@ -54,9 +66,10 @@ public class LocalFileStorageService {
         );
 
         Path filePath = directory.resolve(storedFilename);
-        return writeFile(directory, filePath, fileBytes);
+        return writeFile(directory, filePath, fileBytes).toString();
     }
 
+    @Override
     public byte[] readFile(String storagePath) {
         try {
             return Files.readAllBytes(Path.of(storagePath));
@@ -65,10 +78,16 @@ public class LocalFileStorageService {
         }
     }
 
+    @Override
     public boolean exists(String storagePath) {
+        if (storagePath == null || storagePath.isBlank()) {
+            return false;
+        }
+
         return Files.exists(Path.of(storagePath));
     }
 
+    @Override
     public void deleteFileIfExists(String storagePath) {
         if (storagePath == null || storagePath.isBlank()) {
             return;

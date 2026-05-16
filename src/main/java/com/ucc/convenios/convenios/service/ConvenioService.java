@@ -17,7 +17,7 @@ import com.ucc.convenios.convenios.repository.ConvenioRepository;
 import com.ucc.convenios.convenios.repository.ConvenioStatusHistoryRepository;
 import com.ucc.convenios.convenios.repository.ConvenioVersionRepository;
 import com.ucc.convenios.documents.pdf.PdfGenerationService;
-import com.ucc.convenios.documents.storage.LocalFileStorageService;
+import com.ucc.convenios.documents.storage.FileStorageService;
 import com.ucc.convenios.roles.entity.Role;
 import com.ucc.convenios.roles.entity.UserRole;
 import com.ucc.convenios.roles.repository.UserRoleRepository;
@@ -35,7 +35,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
@@ -53,7 +52,7 @@ public class ConvenioService {
     private final UserRoleRepository userRoleRepository;
     private final ApprovalService approvalService;
     private final PdfGenerationService pdfGenerationService;
-    private final LocalFileStorageService localFileStorageService;
+    private final FileStorageService fileStorageService;
     private final ConvenioDocumentService convenioDocumentService;
     private final CompanyDocumentWorkflowService companyDocumentWorkflowService;
 
@@ -66,7 +65,7 @@ public class ConvenioService {
             UserRoleRepository userRoleRepository,
             ApprovalService approvalService,
             PdfGenerationService pdfGenerationService,
-            LocalFileStorageService localFileStorageService,
+            FileStorageService fileStorageService,
             ConvenioDocumentService convenioDocumentService,
             CompanyDocumentWorkflowService companyDocumentWorkflowService
     ) {
@@ -78,7 +77,7 @@ public class ConvenioService {
         this.userRoleRepository = userRoleRepository;
         this.approvalService = approvalService;
         this.pdfGenerationService = pdfGenerationService;
-        this.localFileStorageService = localFileStorageService;
+        this.fileStorageService = fileStorageService;
         this.convenioDocumentService = convenioDocumentService;
         this.companyDocumentWorkflowService = companyDocumentWorkflowService;
     }
@@ -314,28 +313,22 @@ public class ConvenioService {
                 convenio.getCurrentVersion()
         );
 
-        Path previewPath = localFileStorageService.savePreviewPdf(convenio.getId(), pdfBytes);
+        String previewPath = fileStorageService.savePreviewPdf(convenio.getId(), pdfBytes);
 
-        return previewPath.toString();
+        return previewPath;
     }
 
     @Transactional(readOnly = true)
     public byte[] getPreviewPdf(UUID convenioId) {
         Convenio convenio = getConvenioById(convenioId);
 
-        Path previewPath = Path.of(
-                "storage",
-                "convenios",
-                "previews",
-                convenio.getId().toString(),
-                "preview.pdf"
-        );
+        String previewPath = fileStorageService.getPreviewPdfStoragePath(convenio.getId());
 
-        if (!localFileStorageService.exists(previewPath.toString())) {
+        if (!fileStorageService.exists(previewPath)) {
             throw new ResourceNotFoundException("No existe vista previa PDF para este convenio");
         }
 
-        return localFileStorageService.readFile(previewPath.toString());
+        return fileStorageService.readFile(previewPath);
     }
 
     @Transactional(readOnly = true)
@@ -363,7 +356,7 @@ public class ConvenioService {
             throw new ResourceNotFoundException("La versión no tiene PDF generado");
         }
 
-        return localFileStorageService.readFile(version.getGeneratedPdfStoragePath());
+        return fileStorageService.readFile(version.getGeneratedPdfStoragePath());
     }
 
     private void validateCanCreateConvenio(User user) {

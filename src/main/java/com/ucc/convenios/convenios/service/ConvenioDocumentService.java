@@ -8,7 +8,7 @@ import com.ucc.convenios.convenios.entity.ConvenioVersion;
 import com.ucc.convenios.convenios.repository.ConvenioGeneratedDocumentRepository;
 import com.ucc.convenios.convenios.repository.ConvenioRepository;
 import com.ucc.convenios.documents.pdf.PdfGenerationService;
-import com.ucc.convenios.documents.storage.LocalFileStorageService;
+import com.ucc.convenios.documents.storage.FileStorageService;
 import com.ucc.convenios.shared.enums.ConvenioGeneratedDocumentType;
 import com.ucc.convenios.shared.enums.ConvenioStage;
 import com.ucc.convenios.shared.exceptions.BadRequestException;
@@ -17,7 +17,6 @@ import com.ucc.convenios.users.entity.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,18 +26,18 @@ public class ConvenioDocumentService {
     private final ConvenioGeneratedDocumentRepository documentRepository;
     private final ConvenioRepository convenioRepository;
     private final PdfGenerationService pdfGenerationService;
-    private final LocalFileStorageService localFileStorageService;
+    private final FileStorageService fileStorageService;
 
     public ConvenioDocumentService(
             ConvenioGeneratedDocumentRepository documentRepository,
             ConvenioRepository convenioRepository,
             PdfGenerationService pdfGenerationService,
-            LocalFileStorageService localFileStorageService
+            FileStorageService fileStorageService
     ) {
         this.documentRepository = documentRepository;
         this.convenioRepository = convenioRepository;
         this.pdfGenerationService = pdfGenerationService;
-        this.localFileStorageService = localFileStorageService;
+        this.fileStorageService = fileStorageService;
     }
 
     @Transactional
@@ -51,7 +50,7 @@ public class ConvenioDocumentService {
 
         String fileName = "version-" + version.getVersionNumber() + "-radicado.pdf";
 
-        Path path = localFileStorageService.saveOfficialPdf(
+        String storagePath = fileStorageService.saveOfficialPdf(
                 convenio.getId(),
                 fileName,
                 pdfBytes
@@ -64,7 +63,7 @@ public class ConvenioDocumentService {
                 ConvenioGeneratedDocumentType.RADICADO,
                 null,
                 fileName,
-                path.toString(),
+                storagePath,
                 generatedBy,
                 "Documento radicado generado al enviar el convenio a revisión."
         );
@@ -81,7 +80,7 @@ public class ConvenioDocumentService {
 
         String fileName = "version-" + version.getVersionNumber() + "-final-aprobado.pdf";
 
-        Path path = localFileStorageService.saveOfficialPdf(
+        String storagePath = fileStorageService.saveOfficialPdf(
                 convenio.getId(),
                 fileName,
                 pdfBytes
@@ -94,7 +93,7 @@ public class ConvenioDocumentService {
                 ConvenioGeneratedDocumentType.FINAL_APROBADO,
                 null,
                 fileName,
-                path.toString(),
+                storagePath,
                 generatedBy,
                 "Documento final aprobado con constancias de revisión."
         );
@@ -119,7 +118,7 @@ public class ConvenioDocumentService {
         String fileName = "version-" + version.getVersionNumber()
                 + "-correccion-" + step.getStage().name().toLowerCase() + ".pdf";
 
-        Path path = localFileStorageService.saveOfficialPdf(
+        String storagePath = fileStorageService.saveOfficialPdf(
                 convenio.getId(),
                 fileName,
                 pdfBytes
@@ -132,7 +131,7 @@ public class ConvenioDocumentService {
                 ConvenioGeneratedDocumentType.CORRECCION_SOLICITADA,
                 step.getStage(),
                 fileName,
-                path.toString(),
+                storagePath,
                 generatedBy,
                 comment
         );
@@ -157,7 +156,7 @@ public class ConvenioDocumentService {
         String fileName = "version-" + version.getVersionNumber()
                 + "-rechazado-" + step.getStage().name().toLowerCase() + ".pdf";
 
-        Path path = localFileStorageService.saveOfficialPdf(
+        String storagePath = fileStorageService.saveOfficialPdf(
                 convenio.getId(),
                 fileName,
                 pdfBytes
@@ -170,7 +169,7 @@ public class ConvenioDocumentService {
                 ConvenioGeneratedDocumentType.RECHAZADO,
                 step.getStage(),
                 fileName,
-                path.toString(),
+                storagePath,
                 generatedBy,
                 comment
         );
@@ -195,7 +194,7 @@ public class ConvenioDocumentService {
         String fileName = "version-" + version.getVersionNumber()
                 + "-revision-vencida-" + step.getStage().name().toLowerCase() + ".pdf";
 
-        Path path = localFileStorageService.saveOfficialPdf(
+        String storagePath = fileStorageService.saveOfficialPdf(
                 convenio.getId(),
                 fileName,
                 pdfBytes
@@ -208,7 +207,7 @@ public class ConvenioDocumentService {
                 ConvenioGeneratedDocumentType.REVISION_VENCIDA,
                 step.getStage(),
                 fileName,
-                path.toString(),
+                storagePath,
                 generatedBy,
                 comment
         );
@@ -234,7 +233,7 @@ public class ConvenioDocumentService {
             throw new BadRequestException("El documento no pertenece a este convenio");
         }
 
-        return localFileStorageService.readFile(document.getStoragePath());
+        return fileStorageService.readFile(document.getStoragePath());
     }
 
     private ConvenioGeneratedDocument saveDocumentRecord(

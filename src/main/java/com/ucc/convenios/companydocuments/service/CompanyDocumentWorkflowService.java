@@ -17,7 +17,7 @@ import com.ucc.convenios.convenios.entity.Convenio;
 import com.ucc.convenios.convenios.entity.ConvenioStatusHistory;
 import com.ucc.convenios.convenios.repository.ConvenioRepository;
 import com.ucc.convenios.convenios.repository.ConvenioStatusHistoryRepository;
-import com.ucc.convenios.documents.storage.LocalFileStorageService;
+import com.ucc.convenios.documents.storage.FileStorageService;
 import com.ucc.convenios.notifications.service.ConvenioNotificationService;
 import com.ucc.convenios.notifications.service.ReviewAlertService;
 import com.ucc.convenios.roles.entity.Role;
@@ -38,7 +38,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -87,7 +86,7 @@ public class CompanyDocumentWorkflowService {
     private final ConvenioStatusHistoryRepository convenioStatusHistoryRepository;
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
-    private final LocalFileStorageService localFileStorageService;
+    private final FileStorageService fileStorageService;
     private final ConvenioNotificationService convenioNotificationService;
     private final ReviewAlertService reviewAlertService;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -100,7 +99,7 @@ public class CompanyDocumentWorkflowService {
             ConvenioStatusHistoryRepository convenioStatusHistoryRepository,
             UserRepository userRepository,
             UserRoleRepository userRoleRepository,
-            LocalFileStorageService localFileStorageService,
+            FileStorageService fileStorageService,
             ConvenioNotificationService convenioNotificationService,
             ReviewAlertService reviewAlertService
     ) {
@@ -111,7 +110,7 @@ public class CompanyDocumentWorkflowService {
         this.convenioStatusHistoryRepository = convenioStatusHistoryRepository;
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
-        this.localFileStorageService = localFileStorageService;
+        this.fileStorageService = fileStorageService;
         this.convenioNotificationService = convenioNotificationService;
         this.reviewAlertService = reviewAlertService;
     }
@@ -201,16 +200,17 @@ public class CompanyDocumentWorkflowService {
 
         CompanySubmittedDocument previousActiveDocument = findPreviousActiveDocument(convenio, documentType);
 
-        Path storagePath;
+        String storagePath;
         try {
-            storagePath = localFileStorageService.saveCompanySubmittedDocument(
+            storagePath = fileStorageService.saveCompanySubmittedDocument(
                     convenio.getId(),
                     request.getId(),
                     file.getOriginalFilename(),
+                    file.getContentType(),
                     file.getBytes()
             );
         } catch (Exception exception) {
-            throw new BadRequestException("No se pudo guardar el documento enviado por la empresa");
+            throw new BadRequestException("No se pudo guardar el documento enviado por la empresa: " + exception.getMessage());
         }
 
         CompanySubmittedDocument document = new CompanySubmittedDocument();
@@ -221,7 +221,7 @@ public class CompanyDocumentWorkflowService {
         document.setOriginalFilename(resolveOriginalFilename(file.getOriginalFilename()));
         document.setMimeType(file.getContentType());
         document.setFileSize(file.getSize());
-        document.setStoragePath(storagePath.toString());
+        document.setStoragePath(storagePath);
         document.setStatus(CompanySubmittedDocumentStatus.SUBIDO);
 
         CompanySubmittedDocument savedDocument = submittedDocumentRepository.save(document);
@@ -269,16 +269,17 @@ public class CompanyDocumentWorkflowService {
         CompanyDocumentRequest request = findOrCreateAdminDocumentRequest(convenio, currentUser);
         CompanySubmittedDocument previousActiveDocument = findPreviousActiveDocument(convenio, documentType);
 
-        Path storagePath;
+        String storagePath;
         try {
-            storagePath = localFileStorageService.saveCompanySubmittedDocument(
+            storagePath = fileStorageService.saveCompanySubmittedDocument(
                     convenio.getId(),
                     request.getId(),
                     file.getOriginalFilename(),
+                    file.getContentType(),
                     file.getBytes()
             );
         } catch (Exception exception) {
-            throw new BadRequestException("No se pudo guardar el documento cargado por ADMIN");
+            throw new BadRequestException("No se pudo guardar el documento cargado por ADMIN: " + exception.getMessage());
         }
 
         CompanySubmittedDocument document = new CompanySubmittedDocument();
@@ -289,7 +290,7 @@ public class CompanyDocumentWorkflowService {
         document.setOriginalFilename(resolveOriginalFilename(file.getOriginalFilename()));
         document.setMimeType(file.getContentType());
         document.setFileSize(file.getSize());
-        document.setStoragePath(storagePath.toString());
+        document.setStoragePath(storagePath);
         document.setStatus(CompanySubmittedDocumentStatus.SUBIDO);
         document.setReviewComment("Documento cargado manualmente por ADMIN: " + currentUser.getEmail());
 
@@ -399,7 +400,7 @@ public class CompanyDocumentWorkflowService {
         document.setApprovedAt(null);
 
         if (request.isDeletePhysicalFile()) {
-            localFileStorageService.deleteFileIfExists(document.getStoragePath());
+            fileStorageService.deleteFileIfExists(document.getStoragePath());
             document.setDeletedFromStorageAt(LocalDateTime.now());
             document.setDeletionReason("Archivo observado y eliminado físicamente: " + request.getComment().trim());
             document.setStatus(CompanySubmittedDocumentStatus.ELIMINADO);
@@ -618,7 +619,7 @@ public class CompanyDocumentWorkflowService {
             CompanySubmittedDocument previousDocument,
             CompanySubmittedDocument replacementDocument
     ) {
-        localFileStorageService.deleteFileIfExists(previousDocument.getStoragePath());
+        fileStorageService.deleteFileIfExists(previousDocument.getStoragePath());
         previousDocument.setDeletedFromStorageAt(LocalDateTime.now());
         previousDocument.setReplacedByDocument(replacementDocument);
         previousDocument.setStatus(CompanySubmittedDocumentStatus.REEMPLAZADO);
