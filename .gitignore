@@ -33,4 +33,4 @@ build/
 .vscode/
 
 # Archivos generados por el sistema
-storage/
+/storage/
