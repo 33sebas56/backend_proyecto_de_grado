@@ -7,6 +7,7 @@ import java.util.List;
 public record DashboardWorkResponse(
         List<DashboardPendingApprovalResponse> pendingApprovals,
         List<ReviewAlertResponse> alerts,
-        List<DashboardRecentConvenioResponse> recentCreatedConvenios
+        List<DashboardRecentConvenioResponse> recentCreatedConvenios,
+        List<DashboardRecentConvenioResponse> pendingFormalizations
 ) {
 }

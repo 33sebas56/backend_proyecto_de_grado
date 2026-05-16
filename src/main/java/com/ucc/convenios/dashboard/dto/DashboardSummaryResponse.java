@@ -9,6 +9,9 @@ public record DashboardSummaryResponse(
         long companiesPendingValidation,
         long totalConvenios,
         Map<String, Long> conveniosByStatus,
+        long conveniosApprovedForSignature,
+        long conveniosPendingFormalization,
+        long conveniosFormalized,
         long pendingApprovals,
         long activeAlerts
 ) {

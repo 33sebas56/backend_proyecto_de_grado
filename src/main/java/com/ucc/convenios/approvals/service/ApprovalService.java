@@ -291,6 +291,8 @@ public class ApprovalService {
                 "Convenio aprobado por todas las etapas. Documento final aprobado generado con constancias.",
                 currentUser
         );
+
+        convenioNotificationService.notifyProjectionFormalizationPending(convenio);
     }
 
     private void moveConvenioToCorrection(ApprovalRound round, User currentUser, String comment) {

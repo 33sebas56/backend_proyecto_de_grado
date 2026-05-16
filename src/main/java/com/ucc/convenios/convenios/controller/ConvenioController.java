@@ -1,17 +1,18 @@
 package com.ucc.convenios.convenios.controller;
 
+import com.ucc.convenios.convenios.dto.ConvenioGeneratedDocumentResponse;
 import com.ucc.convenios.convenios.dto.ConvenioResponse;
 import com.ucc.convenios.convenios.dto.ConvenioStatusHistoryResponse;
 import com.ucc.convenios.convenios.dto.ConvenioVersionResponse;
 import com.ucc.convenios.convenios.dto.CreateConvenioRequest;
 import com.ucc.convenios.convenios.service.ConvenioService;
 import jakarta.validation.Valid;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import com.ucc.convenios.convenios.dto.ConvenioGeneratedDocumentResponse;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
@@ -61,6 +62,16 @@ public class ConvenioController {
     ) {
         return convenioService.submitConvenio(id, authentication);
     }
+
+    @PostMapping("/{id}/formalize")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('GESTOR_PROYECCION')")
+    public ConvenioResponse formalizeConvenio(
+            @PathVariable UUID id,
+            Authentication authentication
+    ) {
+        return convenioService.formalizeConvenio(id, authentication);
+    }
+
     @PostMapping("/{id}/preview-pdf")
     public String generatePreviewPdf(
             @PathVariable UUID id,
@@ -91,6 +102,7 @@ public class ConvenioController {
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdfBytes);
     }
+
     @GetMapping("/{id}/documents")
     public List<ConvenioGeneratedDocumentResponse> findGeneratedDocuments(@PathVariable UUID id) {
         return convenioService.findGeneratedDocuments(id);

@@ -31,6 +31,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class DashboardService {
@@ -79,6 +80,10 @@ public class DashboardService {
                 .mapToLong(Integer::longValue)
                 .sum();
 
+        long myPendingFormalizations = canSeeFormalizationWork(roles)
+                ? convenioRepository.countByCurrentStatus(ConvenioStatus.APROBADO_PARA_FIRMA)
+                : 0;
+
         MyDashboardSummaryResponse summary = new MyDashboardSummaryResponse(
                 approvalStepRepository.countByAssignedUserAndStatus(currentUser, ApprovalStepStatus.PENDIENTE),
                 reviewAlertRepository.countByRecipientUser(currentUser),
@@ -87,7 +92,9 @@ public class DashboardService {
                 convenioRepository.countByCreatedBy(currentUser),
                 convenioRepository.countByCreatedByAndCurrentStatus(currentUser, ConvenioStatus.EN_CORRECCION),
                 convenioRepository.countByCreatedByAndCurrentStatus(currentUser, ConvenioStatus.PENDIENTE_DOCUMENTOS_EMPRESA),
-                convenioRepository.countByCreatedByAndCurrentStatus(currentUser, ConvenioStatus.LISTO_PARA_RADICAR)
+                convenioRepository.countByCreatedByAndCurrentStatus(currentUser, ConvenioStatus.LISTO_PARA_RADICAR),
+                myPendingFormalizations,
+                convenioRepository.countByCreatedByAndCurrentStatus(currentUser, ConvenioStatus.FORMALIZADO)
         );
 
         List<ReviewerProfileDashboardResponse> reviewerProfiles = profiles.stream()
@@ -104,6 +111,7 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public DashboardWorkResponse getMyWork(Authentication authentication) {
         User currentUser = getCurrentUser(authentication);
+        List<String> roles = getRoleNames(currentUser);
 
         List<DashboardPendingApprovalResponse> pendingApprovals = approvalStepRepository
                 .findByAssignedUserAndStatusOrderByAssignedAtDesc(currentUser, ApprovalStepStatus.PENDIENTE)
@@ -123,15 +131,29 @@ public class DashboardService {
                 .map(DashboardRecentConvenioResponse::fromEntity)
                 .toList();
 
+        List<DashboardRecentConvenioResponse> pendingFormalizations = canSeeFormalizationWork(roles)
+                ? convenioRepository.findByCurrentStatusOrderByUpdatedAtDesc(
+                        ConvenioStatus.APROBADO_PARA_FIRMA,
+                        PageRequest.of(0, 10)
+                )
+                .stream()
+                .map(DashboardRecentConvenioResponse::fromEntity)
+                .toList()
+                : List.of();
+
         return new DashboardWorkResponse(
                 pendingApprovals,
                 alerts,
-                recentCreatedConvenios
+                recentCreatedConvenios,
+                pendingFormalizations
         );
     }
 
     @Transactional(readOnly = true)
     public DashboardSummaryResponse getAdminSummary() {
+        long approvedForSignature = convenioRepository.countByCurrentStatus(ConvenioStatus.APROBADO_PARA_FIRMA);
+        long formalized = convenioRepository.countByCurrentStatus(ConvenioStatus.FORMALIZADO);
+
         return new DashboardSummaryResponse(
                 userRepository.count(),
                 userRepository.countByActiveTrue(),
@@ -139,6 +161,9 @@ public class DashboardService {
                 companyRepository.countByStatus(CompanyStatus.PENDIENTE_VALIDACION),
                 convenioRepository.count(),
                 buildConveniosByStatus(),
+                approvedForSignature,
+                approvedForSignature,
+                formalized,
                 approvalStepRepository.countByStatus(ApprovalStepStatus.PENDIENTE),
                 reviewAlertRepository.countByReadAtIsNull()
         );
@@ -214,6 +239,11 @@ public class DashboardService {
                 .map(UserRole::getRole)
                 .map(role -> role.getName())
                 .toList();
+    }
+
+    private boolean canSeeFormalizationWork(List<String> roles) {
+        Set<String> allowedRoles = Set.of("ADMIN", "GESTOR_PROYECCION");
+        return roles.stream().anyMatch(allowedRoles::contains);
     }
 
     private User getCurrentUser(Authentication authentication) {

@@ -178,6 +178,38 @@ public class EmailTemplateService {
         ));
     }
 
+    public String buildFormalizationPendingSubject(String convenioCode) {
+        return "Convenio pendiente de formalización - " + convenioCode;
+    }
+
+    public String buildFormalizationPendingHtml(
+            String convenioCode,
+            String companyName,
+            String convenioTypeLabel,
+            Integer durationMonths,
+            String systemUrl
+    ) {
+        String durationText = durationMonths == null
+                ? "No especificada"
+                : durationMonths + " meses";
+
+        return wrapHtml("""
+                <h2>Convenio pendiente de formalización</h2>
+                <p>El convenio <strong>%s</strong> fue aprobado por todas las etapas y quedó pendiente de formalización por Proyección Social.</p>
+                <p>Empresa: <strong>%s</strong></p>
+                <p>Tipo de convenio: <strong>%s</strong></p>
+                <p>Duración propuesta: <strong>%s</strong></p>
+                <p>Ingresa al sistema para revisar el convenio y formalizarlo. La fecha de inicio se asignará el día en que se formalice.</p>
+                <p><a href="%s">Abrir sistema</a></p>
+                """.formatted(
+                escapeHtml(convenioCode),
+                escapeHtml(companyName),
+                escapeHtml(convenioTypeLabel),
+                escapeHtml(durationText),
+                escapeHtml(systemUrl)
+        ));
+    }
+
     private String wrapHtml(String bodyContent) {
         return """
                 <html>

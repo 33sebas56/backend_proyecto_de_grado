@@ -36,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
 import java.util.Set;
@@ -94,6 +95,10 @@ public class ConvenioService {
             throw new BadRequestException("Solo se pueden crear convenios con empresas validadas");
         }
 
+        if (request.getDurationMonths() == null || request.getDurationMonths() <= 0) {
+            throw new BadRequestException("La duración del convenio debe ser mayor a 0 meses");
+        }
+
         ConvenioType convenioType = request.getConvenioType() == null
                 ? ConvenioType.MARCO
                 : request.getConvenioType();
@@ -104,8 +109,8 @@ public class ConvenioService {
         convenio.setCreatedBy(currentUser);
         convenio.setConvenioType(convenioType);
         convenio.setCurrentStatus(ConvenioStatus.BORRADOR);
-        convenio.setStartDate(request.getStartDate());
-        convenio.setEndDate(request.getEndDate());
+        convenio.setStartDate(null);
+        convenio.setEndDate(null);
 
         Convenio savedConvenio = convenioRepository.save(convenio);
 
@@ -116,8 +121,8 @@ public class ConvenioService {
         version.setObjective(request.getObjective());
         version.setDescription(request.getDescription());
         version.setDurationMonths(request.getDurationMonths());
-        version.setStartDate(request.getStartDate());
-        version.setEndDate(request.getEndDate());
+        version.setStartDate(null);
+        version.setEndDate(null);
         version.setExternalEntityObligations(request.getExternalEntityObligations());
         version.setUniversityObligations(request.getUniversityObligations());
         version.setEstimatedValue(request.getEstimatedValue());
@@ -137,7 +142,8 @@ public class ConvenioService {
                 null,
                 null,
                 "Convenio creado en estado borrador. Tipo: " + convenioType.getDisplayName()
-                        + ". Firmante de rectoría: " + convenioType.getRectorSignerLabel(),
+                        + ". Duración propuesta: " + request.getDurationMonths() + " meses."
+                        + " Firmante de rectoría: " + convenioType.getRectorSignerLabel(),
                 currentUser
         );
 
@@ -235,6 +241,65 @@ public class ConvenioService {
     }
 
     @Transactional
+    public ConvenioResponse formalizeConvenio(UUID convenioId, Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        validateCanFormalizeConvenio(currentUser);
+
+        Convenio convenio = getConvenioForUpdate(convenioId);
+
+        if (convenio.getCurrentStatus() != ConvenioStatus.APROBADO_PARA_FIRMA) {
+            throw new BadRequestException("Solo se pueden formalizar convenios en estado APROBADO_PARA_FIRMA");
+        }
+
+        ConvenioVersion currentVersion = convenio.getCurrentVersion();
+
+        if (currentVersion == null) {
+            throw new BadRequestException("El convenio no tiene una versión actual");
+        }
+
+        Integer durationMonths = currentVersion.getDurationMonths();
+
+        if (durationMonths == null || durationMonths <= 0) {
+            throw new BadRequestException("El convenio no tiene una duración válida para formalizar");
+        }
+
+        ConvenioStatus previousStatus = convenio.getCurrentStatus();
+        ConvenioStage previousStage = convenio.getCurrentStage();
+
+        LocalDate startDate = LocalDate.now();
+        LocalDate endDate = startDate.plusMonths(durationMonths);
+
+        convenio.setStartDate(startDate);
+        convenio.setEndDate(endDate);
+        convenio.setCurrentStatus(ConvenioStatus.FORMALIZADO);
+        convenio.setCurrentStage(null);
+
+        currentVersion.setStartDate(startDate);
+        currentVersion.setEndDate(endDate);
+        convenioVersionRepository.save(currentVersion);
+
+        Convenio savedConvenio = convenioRepository.save(convenio);
+
+        registerStatusHistory(
+                savedConvenio,
+                previousStatus,
+                ConvenioStatus.FORMALIZADO,
+                previousStage,
+                null,
+                "Convenio formalizado por Proyección Social. Fecha de inicio: "
+                        + startDate
+                        + ". Fecha de finalización: "
+                        + endDate
+                        + ". Duración aplicada: "
+                        + durationMonths
+                        + " meses.",
+                currentUser
+        );
+
+        return ConvenioResponse.fromEntity(savedConvenio);
+    }
+
+    @Transactional
     public String generatePreviewPdf(UUID convenioId, Authentication authentication) {
         getCurrentUser(authentication);
 
@@ -315,6 +380,20 @@ public class ConvenioService {
         }
     }
 
+    private void validateCanFormalizeConvenio(User user) {
+        Set<String> allowedRoles = Set.of("ADMIN", "GESTOR_PROYECCION");
+
+        boolean allowed = userRoleRepository.findByUser(user)
+                .stream()
+                .map(UserRole::getRole)
+                .map(Role::getName)
+                .anyMatch(allowedRoles::contains);
+
+        if (!allowed) {
+            throw new BadRequestException("Solo ADMIN o GESTOR_PROYECCION pueden formalizar convenios");
+        }
+    }
+
     private ConvenioStage resolveFirstFormalStage(User creator) {
         boolean createdByProjection = userRoleRepository.findByUser(creator)
                 .stream()
@@ -369,6 +448,11 @@ public class ConvenioService {
 
     private Convenio getConvenioWithDetails(UUID convenioId) {
         return convenioRepository.findWithDetailsById(convenioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Convenio no encontrado"));
+    }
+
+    private Convenio getConvenioForUpdate(UUID convenioId) {
+        return convenioRepository.findForUpdateById(convenioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Convenio no encontrado"));
     }
 

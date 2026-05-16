@@ -45,6 +45,7 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -54,6 +55,20 @@ public class CompanyDocumentWorkflowService {
 
     private static final int TOKEN_EXPIRATION_DAYS = 15;
     private static final int MAX_EARLY_CORRECTION_ROUNDS = 6;
+    private static final long MAX_FILE_SIZE_BYTES = 25L * 1024L * 1024L;
+
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
+            "application/pdf",
+            "image/jpeg",
+            "image/png"
+    );
+
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
+            ".pdf",
+            ".jpg",
+            ".jpeg",
+            ".png"
+    );
 
     private static final List<CompanyExternalDocumentType> REQUIRED_DOCUMENT_TYPES = List.of(
             CompanyExternalDocumentType.CEDULA_REPRESENTANTE,
@@ -181,13 +196,8 @@ public class CompanyDocumentWorkflowService {
         CompanyDocumentRequest request = token.getRequest();
         Convenio convenio = token.getConvenio();
 
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException("El archivo es obligatorio");
-        }
-
-        if (!REQUIRED_DOCUMENT_TYPES.contains(documentType)) {
-            throw new BadRequestException("Tipo documental no permitido");
-        }
+        validateUploadedFile(file);
+        validateCompanyDocumentType(documentType);
 
         CompanySubmittedDocument previousActiveDocument = findPreviousActiveDocument(convenio, documentType);
 
@@ -237,6 +247,75 @@ public class CompanyDocumentWorkflowService {
         );
 
         notifyResponsibleCompanyUploadedDocuments(savedConvenio);
+
+        return CompanySubmittedDocumentResponse.fromEntity(savedDocument);
+    }
+
+    @Transactional
+    public CompanySubmittedDocumentResponse adminUploadCompanyDocument(
+            UUID convenioId,
+            CompanyExternalDocumentType documentType,
+            String displayName,
+            MultipartFile file,
+            Authentication authentication
+    ) {
+        User currentUser = getCurrentUser(authentication);
+        validateAdmin(currentUser);
+
+        Convenio convenio = getConvenioWithDetails(convenioId);
+        validateUploadedFile(file);
+        validateCompanyDocumentType(documentType);
+
+        CompanyDocumentRequest request = findOrCreateAdminDocumentRequest(convenio, currentUser);
+        CompanySubmittedDocument previousActiveDocument = findPreviousActiveDocument(convenio, documentType);
+
+        Path storagePath;
+        try {
+            storagePath = localFileStorageService.saveCompanySubmittedDocument(
+                    convenio.getId(),
+                    request.getId(),
+                    file.getOriginalFilename(),
+                    file.getBytes()
+            );
+        } catch (Exception exception) {
+            throw new BadRequestException("No se pudo guardar el documento cargado por ADMIN");
+        }
+
+        CompanySubmittedDocument document = new CompanySubmittedDocument();
+        document.setRequest(request);
+        document.setConvenio(convenio);
+        document.setDocumentType(documentType);
+        document.setDisplayName(resolveDisplayName(documentType, displayName));
+        document.setOriginalFilename(resolveOriginalFilename(file.getOriginalFilename()));
+        document.setMimeType(file.getContentType());
+        document.setFileSize(file.getSize());
+        document.setStoragePath(storagePath.toString());
+        document.setStatus(CompanySubmittedDocumentStatus.SUBIDO);
+        document.setReviewComment("Documento cargado manualmente por ADMIN: " + currentUser.getEmail());
+
+        CompanySubmittedDocument savedDocument = submittedDocumentRepository.save(document);
+
+        if (previousActiveDocument != null) {
+            replacePreviousDocument(previousActiveDocument, savedDocument);
+        }
+
+        request.setStatus(CompanyDocumentRequestStatus.DOCUMENTOS_RECIBIDOS);
+        request.setSubmittedAt(LocalDateTime.now());
+        documentRequestRepository.save(request);
+
+        ConvenioStatus previousStatus = convenio.getCurrentStatus();
+        if (shouldMoveToDocumentsReceived(previousStatus)) {
+            convenio.setCurrentStatus(ConvenioStatus.DOCUMENTOS_EMPRESA_RECIBIDOS);
+        }
+        Convenio savedConvenio = convenioRepository.save(convenio);
+
+        registerStatusHistory(
+                savedConvenio,
+                previousStatus,
+                savedConvenio.getCurrentStatus(),
+                "Documento externo cargado manualmente por ADMIN: " + savedDocument.getDisplayName(),
+                currentUser
+        );
 
         return CompanySubmittedDocumentResponse.fromEntity(savedDocument);
     }
@@ -474,6 +553,37 @@ public class CompanyDocumentWorkflowService {
                         .isPresent());
     }
 
+    private CompanyDocumentRequest findOrCreateAdminDocumentRequest(Convenio convenio, User currentUser) {
+        CompanyDocumentRequest lastRequest = findLastRequest(convenio);
+
+        if (lastRequest != null &&
+                lastRequest.getStatus() != CompanyDocumentRequestStatus.APROBADA &&
+                lastRequest.getStatus() != CompanyDocumentRequestStatus.CANCELADA &&
+                lastRequest.getStatus() != CompanyDocumentRequestStatus.VENCIDA) {
+            return lastRequest;
+        }
+
+        int nextRoundNumber = lastRequest == null ? 1 : lastRequest.getRoundNumber() + 1;
+
+        CompanyDocumentRequest request = new CompanyDocumentRequest();
+        request.setConvenio(convenio);
+        request.setCompany(convenio.getCompany());
+        request.setRoundNumber(nextRoundNumber);
+        request.setStatus(CompanyDocumentRequestStatus.DOCUMENTOS_RECIBIDOS);
+        request.setSubmittedAt(LocalDateTime.now());
+        request.setReviewedBy(currentUser);
+        request.setReviewComment("Solicitud documental creada por carga manual de ADMIN");
+
+        return documentRequestRepository.save(request);
+    }
+
+    private boolean shouldMoveToDocumentsReceived(ConvenioStatus currentStatus) {
+        return currentStatus == ConvenioStatus.BORRADOR ||
+                currentStatus == ConvenioStatus.PENDIENTE_DOCUMENTOS_EMPRESA ||
+                currentStatus == ConvenioStatus.DOCUMENTOS_OBSERVADOS_EMPRESA ||
+                currentStatus == ConvenioStatus.DOCUMENTOS_EMPRESA_RECIBIDOS;
+    }
+
     private void validateAllRequiredDocumentsApproved(Convenio convenio) {
         List<String> missingDocuments = REQUIRED_DOCUMENT_TYPES.stream()
                 .filter(type -> submittedDocumentRepository
@@ -595,6 +705,56 @@ public class CompanyDocumentWorkflowService {
         );
 
         convenioNotificationService.notifyEarlyCorrectionLimit(convenio);
+    }
+
+    private void validateAdmin(User user) {
+        if (!hasRole(user, "ADMIN")) {
+            throw new BadRequestException("Solo ADMIN puede cargar documentación manualmente");
+        }
+    }
+
+    private boolean hasRole(User user, String roleName) {
+        return userRoleRepository.findByUser(user)
+                .stream()
+                .map(UserRole::getRole)
+                .map(Role::getName)
+                .anyMatch(roleName::equals);
+    }
+
+    private void validateCompanyDocumentType(CompanyExternalDocumentType documentType) {
+        if (!REQUIRED_DOCUMENT_TYPES.contains(documentType)) {
+            throw new BadRequestException("Tipo documental no permitido");
+        }
+    }
+
+    private void validateUploadedFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("El archivo es obligatorio");
+        }
+
+        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
+            throw new BadRequestException("El archivo supera el tamaño máximo permitido de 25 MB");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            throw new BadRequestException("El archivo debe tener un nombre válido");
+        }
+
+        String normalizedFilename = originalFilename.trim().toLowerCase(Locale.ROOT);
+        boolean hasAllowedExtension = ALLOWED_EXTENSIONS.stream().anyMatch(normalizedFilename::endsWith);
+        if (!hasAllowedExtension) {
+            throw new BadRequestException("Formato de archivo no permitido. Solo se aceptan PDF, JPG, JPEG o PNG");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || contentType.isBlank()) {
+            throw new BadRequestException("No se pudo identificar el tipo del archivo");
+        }
+
+        if (!ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
+            throw new BadRequestException("Tipo de archivo no permitido. Solo se aceptan PDF, JPG, JPEG o PNG");
+        }
     }
 
     private void validateCompanyHasContactEmail(Convenio convenio) {

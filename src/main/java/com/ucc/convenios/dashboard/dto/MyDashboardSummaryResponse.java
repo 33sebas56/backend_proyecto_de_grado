@@ -8,6 +8,8 @@ public record MyDashboardSummaryResponse(
         long myCreatedConvenios,
         long myConveniosInCorrection,
         long myConveniosPendingCompanyDocuments,
-        long myConveniosReadyToSubmit
+        long myConveniosReadyToSubmit,
+        long myPendingFormalizations,
+        long myFormalizedConvenios
 ) {
 }

@@ -2,12 +2,12 @@ package com.ucc.convenios.convenios.dto;
 
 import com.ucc.convenios.shared.enums.ConvenioType;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.UUID;
 
 public class CreateConvenioRequest {
@@ -27,11 +27,9 @@ public class CreateConvenioRequest {
 
     private String description;
 
+    @NotNull(message = "La duración del convenio es obligatoria")
+    @Min(value = 1, message = "La duración del convenio debe ser mínimo de 1 mes")
     private Integer durationMonths;
-
-    private LocalDate startDate;
-
-    private LocalDate endDate;
 
     private String externalEntityObligations;
 
@@ -89,22 +87,6 @@ public class CreateConvenioRequest {
 
     public void setDurationMonths(Integer durationMonths) {
         this.durationMonths = durationMonths;
-    }
-
-    public LocalDate getStartDate() {
-        return startDate;
-    }
-
-    public void setStartDate(LocalDate startDate) {
-        this.startDate = startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return endDate;
-    }
-
-    public void setEndDate(LocalDate endDate) {
-        this.endDate = endDate;
     }
 
     public String getExternalEntityObligations() {

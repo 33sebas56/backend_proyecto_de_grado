@@ -1,0 +1,22 @@
+.git
+.gitignore
+.gitattributes
+.idea
+.vscode
+*.iml
+
+# Build outputs
+target
+*.log
+
+# Local/generated storage
+storage
+
+# Local env files / secrets
+.env
+.env.*
+application-local.properties
+
+# OS files
+.DS_Store
+Thumbs.db

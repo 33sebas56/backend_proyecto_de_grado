@@ -27,7 +27,6 @@ import java.util.Locale;
 @Service
 public class PdfGenerationService {
 
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public byte[] generateConvenioPreviewPdf(Convenio convenio, ConvenioVersion version) {
@@ -180,8 +179,6 @@ public class PdfGenerationService {
         addRow(table, "Título", version.getTitle());
         addRow(table, "Versión", String.valueOf(version.getVersionNumber()));
         addRow(table, "Duración", version.getDurationMonths() == null ? "No especificada" : version.getDurationMonths() + " meses");
-        addRow(table, "Fecha de inicio", version.getStartDate() == null ? "No especificada" : version.getStartDate().format(DATE_FORMATTER));
-        addRow(table, "Fecha de finalización", version.getEndDate() == null ? "No especificada" : version.getEndDate().format(DATE_FORMATTER));
         addRow(table, "Valor estimado", formatMoney(version));
 
         document.add(table);
