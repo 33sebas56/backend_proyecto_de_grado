@@ -28,6 +28,9 @@ public interface ConvenioRepository extends JpaRepository<Convenio, UUID> {
     Optional<Convenio> findForUpdateById(@Param("id") UUID id);
 
     @EntityGraph(attributePaths = {"company", "createdBy", "currentVersion"})
+    List<Convenio> findAllByOrderByUpdatedAtDesc();
+
+    @EntityGraph(attributePaths = {"company", "createdBy", "currentVersion"})
     List<Convenio> findByCurrentStatus(ConvenioStatus currentStatus);
 
     @EntityGraph(attributePaths = {"company", "createdBy", "currentVersion"})

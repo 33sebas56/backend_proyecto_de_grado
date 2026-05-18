@@ -566,22 +566,25 @@ No lleva body.
 ```http
 POST {{baseUrl}}/api/convenios
 Authorization: Bearer {{tokenProfesor}}
+Content-Type: application/json
 ```
+
+Tambien puede crear convenios un usuario con rol `GESTOR_PROYECCION`, segun permisos del backend.
 
 ### Body actualizado
 
-Después del ajuste de formalización, al crear convenio se envía duración en meses. No se envían `startDate` ni `endDate`; esas fechas se calculan cuando Proyección Social formaliza.
+Al crear convenio se envia la duracion en meses. No se envian `startDate` ni `endDate`, porque esas fechas se calculan despues, cuando Proyeccion Social formaliza el convenio.
 
 ```json
 {
   "companyId": "{{companyId}}",
   "convenioType": "PRACTICA",
-  "title": "Convenio de práctica empresarial",
-  "objective": "Establecer condiciones para el desarrollo de prácticas profesionales.",
-  "description": "Convenio académico para prácticas estudiantiles.",
+  "title": "Convenio de practica empresarial",
+  "objective": "Establecer condiciones para el desarrollo de practicas profesionales.",
+  "description": "Convenio academico para practicas estudiantiles.",
   "durationMonths": 12,
-  "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentación requerida.",
-  "universityObligations": "Acompañar proceso académico y hacer seguimiento.",
+  "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentacion requerida.",
+  "universityObligations": "Acompanar proceso academico y hacer seguimiento.",
   "estimatedValue": 0
 }
 ```
@@ -608,9 +611,18 @@ DESCUENTO
   "currentStatus": "BORRADOR",
   "currentStage": null,
   "convenioType": "PRACTICA",
-  "convenioTypeLabel": "Convenio de prácticas",
-  "rectorSignerLabel": "Rector de la institución",
+  "convenioTypeLabel": "Convenio de practicas",
+  "rectorSignerLabel": "Rector de la institucion",
   "currentVersionId": "uuid",
+  "currentVersionNumber": 1,
+  "title": "Convenio de practica empresarial",
+  "objective": "Establecer condiciones para el desarrollo de practicas profesionales.",
+  "description": "Convenio academico para practicas estudiantiles.",
+  "durationMonths": 12,
+  "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentacion requerida.",
+  "universityObligations": "Acompanar proceso academico y hacer seguimiento.",
+  "estimatedValue": 0,
+  "canEditBeforeReview": true,
   "startDate": null,
   "endDate": null,
   "createdAt": "2026-05-15T12:00:00",
@@ -628,11 +640,15 @@ GET {{baseUrl}}/api/convenios
 Authorization: Bearer {{tokenAdmin}}
 ```
 
+Tambien puede ser consumido por usuarios internos autenticados segun permisos del backend.
+
 ### Body
 
 No lleva body.
 
 ### Response
+
+Devuelve una lista de convenios. Cada item incluye datos generales del convenio y datos principales de la version actual, como `title`, `objective`, `description`, `durationMonths`, obligaciones y valor estimado.
 
 ```json
 [
@@ -646,9 +662,18 @@ No lleva body.
     "currentStatus": "PENDIENTE_DOCUMENTOS_EMPRESA",
     "currentStage": null,
     "convenioType": "PRACTICA",
-    "convenioTypeLabel": "Convenio de prácticas",
-    "rectorSignerLabel": "Rector de la institución",
+    "convenioTypeLabel": "Convenio de practicas",
+    "rectorSignerLabel": "Rector de la institucion",
     "currentVersionId": "uuid",
+    "currentVersionNumber": 1,
+    "title": "Convenio de practica empresarial",
+    "objective": "Establecer condiciones para el desarrollo de practicas profesionales.",
+    "description": "Convenio academico para practicas estudiantiles.",
+    "durationMonths": 12,
+    "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentacion requerida.",
+    "universityObligations": "Acompanar proceso academico y hacer seguimiento.",
+    "estimatedValue": 0,
+    "canEditBeforeReview": true,
     "startDate": null,
     "endDate": null,
     "createdAt": "2026-05-15T12:00:00",
@@ -657,6 +682,14 @@ No lleva body.
   }
 ]
 ```
+
+### Notas para frontend
+
+- `title` es el titulo que debe mostrarse en tablas, cards y buscadores de convenios.
+- `currentStatus` sirve para pintar el estado general del convenio.
+- `currentStage` sirve para pintar la etapa de revision formal cuando el convenio ya esta en flujo de aprobacion.
+- `canEditBeforeReview` sirve para decidir si se muestra o no el boton de editar.
+- `startDate` y `endDate` pueden venir `null` hasta que Proyeccion Social formalice el convenio.
 
 ---
 
@@ -673,11 +706,233 @@ No lleva body.
 
 ### Response
 
-Devuelve un objeto `ConvenioResponse`.
+Devuelve un objeto `ConvenioResponse` con la misma estructura del listado, pero correspondiente a un solo convenio.
+
+```json
+{
+  "id": "uuid",
+  "code": "CONV-2026-0001",
+  "companyId": "uuid",
+  "companyNit": "900123456-7",
+  "companyBusinessName": "Empresa Prueba Convenios SAS",
+  "createdById": "uuid",
+  "currentStatus": "LISTO_PARA_RADICAR",
+  "currentStage": null,
+  "convenioType": "PRACTICA",
+  "convenioTypeLabel": "Convenio de practicas",
+  "rectorSignerLabel": "Rector de la institucion",
+  "currentVersionId": "uuid",
+  "currentVersionNumber": 1,
+  "title": "Convenio de practica empresarial",
+  "objective": "Establecer condiciones para el desarrollo de practicas profesionales.",
+  "description": "Convenio academico para practicas estudiantiles.",
+  "durationMonths": 12,
+  "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentacion requerida.",
+  "universityObligations": "Acompanar proceso academico y hacer seguimiento.",
+  "estimatedValue": 0,
+  "canEditBeforeReview": true,
+  "startDate": null,
+  "endDate": null,
+  "createdAt": "2026-05-15T12:00:00",
+  "updatedAt": "2026-05-15T12:30:00",
+  "revisionIssueCount": 0
+}
+```
 
 ---
 
-## 8.4 Versiones del convenio
+## 8.4 Actualizar convenio antes de revision formal
+
+```http
+PUT {{baseUrl}}/api/convenios/{{convenioId}}
+Authorization: Bearer {{tokenProfesor}}
+Content-Type: application/json
+```
+
+### Para que sirve
+
+Permite corregir datos del convenio antes de enviarlo a revision formal. Es decir, antes de radicarlo y antes de que entre a Proyeccion/Juridica/Rectoria.
+
+### Quien puede editar
+
+Puede editar el convenio:
+
+- El usuario que creo el convenio, por ejemplo el profesor creador.
+- Usuarios con rol `GESTOR_PROYECCION`.
+- Usuarios con rol `ADMIN`.
+
+Si el profesor creo el convenio, si puede editarlo antes de radicarlo. Si el profesor no fue quien lo creo, no deberia poder editarlo, salvo que tenga tambien un rol permitido como `ADMIN` o `GESTOR_PROYECCION`.
+
+### En que estados se puede editar
+
+El convenio se puede editar solo cuando esta antes de revision formal:
+
+```text
+BORRADOR
+EMPRESA_PENDIENTE
+PENDIENTE_DOCUMENTOS_EMPRESA
+DOCUMENTOS_EMPRESA_RECIBIDOS
+DOCUMENTOS_OBSERVADOS_EMPRESA
+DOCUMENTOS_APROBADOS
+LISTO_PARA_RADICAR
+```
+
+### En que estados ya NO se puede editar
+
+No se puede editar cuando ya fue radicado o cuando ya entro al flujo formal de revision/aprobacion:
+
+```text
+RADICADO
+EN_REVISION
+EN_CORRECCION
+APROBADO_PARA_FIRMA
+FORMALIZADO
+RECHAZADO
+DESISTIDO
+VENCIDO
+CERRADO
+```
+
+### Que se puede editar
+
+Todos los campos son opcionales. El frontend puede enviar solo los campos que quiera cambiar.
+
+```json
+{
+  "companyId": "uuid",
+  "convenioType": "PRACTICA",
+  "title": "Convenio de practica empresarial actualizado",
+  "objective": "Nuevo objeto del convenio.",
+  "description": "Nueva descripcion del convenio.",
+  "durationMonths": 12,
+  "externalEntityObligations": "Nuevas obligaciones de la empresa.",
+  "universityObligations": "Nuevas obligaciones de la universidad.",
+  "estimatedValue": 0
+}
+```
+
+### Reglas importantes
+
+- `companyId` solo se puede cambiar cuando el convenio esta en `BORRADOR`.
+- `companyId` debe corresponder a una empresa validada.
+- `durationMonths` debe ser mayor a 0.
+- `title` no puede estar vacio si se envia.
+- `objective` no puede estar vacio si se envia.
+- Este endpoint no cambia `currentStatus` directamente.
+- Este endpoint no cambia `currentStage` directamente.
+- Este endpoint no cambia `startDate` ni `endDate`.
+- Este endpoint no sube ni elimina documentos.
+- Para documentos se usan los endpoints de carga documental correspondientes.
+
+### Ejemplo: actualizar solo titulo y duracion
+
+```json
+{
+  "title": "Convenio de practica empresarial 2026",
+  "durationMonths": 18
+}
+```
+
+### Response
+
+Devuelve el convenio actualizado.
+
+```json
+{
+  "id": "uuid",
+  "code": "CONV-2026-0001",
+  "companyId": "uuid",
+  "companyNit": "900123456-7",
+  "companyBusinessName": "Empresa Prueba Convenios SAS",
+  "createdById": "uuid",
+  "currentStatus": "LISTO_PARA_RADICAR",
+  "currentStage": null,
+  "convenioType": "PRACTICA",
+  "convenioTypeLabel": "Convenio de practicas",
+  "rectorSignerLabel": "Rector de la institucion",
+  "currentVersionId": "uuid",
+  "currentVersionNumber": 1,
+  "title": "Convenio de practica empresarial 2026",
+  "objective": "Establecer condiciones para el desarrollo de practicas profesionales.",
+  "description": "Convenio academico para practicas estudiantiles.",
+  "durationMonths": 18,
+  "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentacion requerida.",
+  "universityObligations": "Acompanar proceso academico y hacer seguimiento.",
+  "estimatedValue": 0,
+  "canEditBeforeReview": true,
+  "startDate": null,
+  "endDate": null,
+  "createdAt": "2026-05-15T12:00:00",
+  "updatedAt": "2026-05-15T13:20:00",
+  "revisionIssueCount": 0
+}
+```
+
+### Errores comunes
+
+```json
+{
+  "message": "El convenio solo se puede editar antes de enviarlo a revision formal"
+}
+```
+
+```json
+{
+  "message": "Solo el responsable del convenio, Proyeccion Social o ADMIN pueden editar el convenio antes de enviarlo a revision"
+}
+```
+
+```json
+{
+  "message": "La empresa solo se puede cambiar mientras el convenio este en BORRADOR"
+}
+```
+
+---
+
+## 8.5 Estados posibles del convenio
+
+Estos son los valores posibles de `currentStatus` segun el enum `ConvenioStatus` del backend.
+
+| Estado | Significado para frontend | Editable con PUT antes de revision |
+|---|---|---|
+| `BORRADOR` | Convenio creado inicialmente. Todavia no entra a flujo documental o revision formal. | Si |
+| `EMPRESA_PENDIENTE` | Estado disponible para casos donde la empresa asociada aun tiene algo pendiente. | Si |
+| `PENDIENTE_DOCUMENTOS_EMPRESA` | Ya se solicito documentacion a la empresa y se espera carga por token publico. | Si |
+| `DOCUMENTOS_EMPRESA_RECIBIDOS` | La empresa ya cargo documentos y estan pendientes de revision interna. | Si |
+| `DOCUMENTOS_OBSERVADOS_EMPRESA` | Los documentos tienen observaciones o requieren correccion. | Si |
+| `DOCUMENTOS_APROBADOS` | Los documentos de la empresa ya fueron aprobados. | Si |
+| `LISTO_PARA_RADICAR` | El convenio ya puede ser radicado para revision formal. | Si |
+| `RADICADO` | El convenio fue radicado. Desde aqui ya no se edita por el PUT general. | No |
+| `EN_REVISION` | El convenio esta en revision formal por Proyeccion, Juridica o Rectoria. | No |
+| `EN_CORRECCION` | El convenio fue devuelto para correcciones desde revision formal. | No |
+| `APROBADO_PARA_FIRMA` | Ya paso aprobaciones y queda pendiente de formalizacion por Proyeccion Social. | No |
+| `FORMALIZADO` | Proyeccion Social formalizo el convenio. Ya tiene `startDate` y `endDate`. | No |
+| `RECHAZADO` | El convenio fue rechazado. | No |
+| `DESISTIDO` | El convenio fue desistido o abandonado administrativamente. | No |
+| `VENCIDO` | El convenio ya supero su fecha de finalizacion. | No |
+| `CERRADO` | El convenio fue cerrado administrativamente. | No |
+
+### Etapas posibles de revision formal
+
+El campo `currentStage` puede venir `null` o con alguno de estos valores:
+
+```text
+PROYECCION
+JURIDICA
+RECTORIA
+```
+
+Notas:
+
+- `currentStage = null` significa que el convenio no esta en una etapa formal activa.
+- En convenios creados por profesor, al radicar normalmente inicia en `PROYECCION`.
+- En convenios creados por Proyeccion Social, al radicar puede pasar directamente a `JURIDICA`.
+- La etapa final usa `RECTORIA`, pero el rol final esperado depende del tipo de convenio: `PRACTICA` usa `RECTORIA`; `MARCO`, `BIENESTAR` y `DESCUENTO` usan `RECTOR_MEDELLIN`.
+
+---
+
+## 8.6 Versiones del convenio
 
 ```http
 GET {{baseUrl}}/api/convenios/{{convenioId}}/versions
@@ -696,14 +951,14 @@ No lleva body.
     "id": "uuid",
     "convenioId": "uuid",
     "versionNumber": 1,
-    "title": "Convenio de práctica empresarial",
-    "objective": "Establecer condiciones para el desarrollo de prácticas profesionales.",
-    "description": "Convenio académico para prácticas estudiantiles.",
+    "title": "Convenio de practica empresarial",
+    "objective": "Establecer condiciones para el desarrollo de practicas profesionales.",
+    "description": "Convenio academico para practicas estudiantiles.",
     "durationMonths": 12,
     "startDate": null,
     "endDate": null,
-    "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentación requerida.",
-    "universityObligations": "Acompañar proceso académico y hacer seguimiento.",
+    "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentacion requerida.",
+    "universityObligations": "Acompanar proceso academico y hacer seguimiento.",
     "estimatedValue": 0,
     "generatedPdfUrl": null,
     "generatedPdfStoragePath": null,
@@ -717,7 +972,7 @@ No lleva body.
 
 ---
 
-## 8.5 Historial del convenio
+## 8.7 Historial del convenio
 
 ```http
 GET {{baseUrl}}/api/convenios/{{convenioId}}/history
@@ -748,7 +1003,7 @@ No lleva body.
 
 ---
 
-## 8.6 Radicar convenio
+## 8.8 Radicar convenio
 
 ```http
 POST {{baseUrl}}/api/convenios/{{convenioId}}/submit
@@ -761,7 +1016,10 @@ No lleva body.
 
 ### Response
 
-Devuelve `ConvenioResponse`. Para convenio creado por PROFESOR debe iniciar etapa `PROYECCION`.
+Devuelve `ConvenioResponse`.
+
+- Si el convenio fue creado por `PROFESOR`, al radicar debe iniciar en etapa `PROYECCION`.
+- Si el convenio fue creado por `GESTOR_PROYECCION`, al radicar puede pasar directamente a `JURIDICA`, segun la logica del backend.
 
 ```json
 {
@@ -770,6 +1028,8 @@ Devuelve `ConvenioResponse`. Para convenio creado por PROFESOR debe iniciar etap
   "currentStatus": "EN_REVISION",
   "currentStage": "PROYECCION",
   "convenioType": "PRACTICA",
+  "title": "Convenio de practica empresarial",
+  "durationMonths": 12,
   "startDate": null,
   "endDate": null
 }
@@ -777,12 +1037,14 @@ Devuelve `ConvenioResponse`. Para convenio creado por PROFESOR debe iniciar etap
 
 ---
 
-## 8.7 Formalizar convenio
+## 8.9 Formalizar convenio
 
 ```http
 POST {{baseUrl}}/api/convenios/{{convenioId}}/formalize
 Authorization: Bearer {{tokenGestorProyeccion}}
 ```
+
+Tambien puede ejecutarlo `ADMIN`, segun permisos del backend.
 
 ### Body
 
@@ -790,7 +1052,7 @@ No lleva body.
 
 ### Cuándo se usa
 
-Se usa cuando el convenio está en `APROBADO_PARA_FIRMA`. Proyección Social lo formaliza y el sistema calcula:
+Se usa cuando el convenio esta en `APROBADO_PARA_FIRMA`. Proyeccion Social lo formaliza y el sistema calcula:
 
 ```text
 startDate = fecha actual
@@ -811,9 +1073,18 @@ currentStatus = FORMALIZADO
   "currentStatus": "FORMALIZADO",
   "currentStage": null,
   "convenioType": "PRACTICA",
-  "convenioTypeLabel": "Convenio de prácticas",
-  "rectorSignerLabel": "Rector de la institución",
+  "convenioTypeLabel": "Convenio de practicas",
+  "rectorSignerLabel": "Rector de la institucion",
   "currentVersionId": "uuid",
+  "currentVersionNumber": 1,
+  "title": "Convenio de practica empresarial",
+  "objective": "Establecer condiciones para el desarrollo de practicas profesionales.",
+  "description": "Convenio academico para practicas estudiantiles.",
+  "durationMonths": 12,
+  "externalEntityObligations": "Asignar tutor, permitir actividades y entregar documentacion requerida.",
+  "universityObligations": "Acompanar proceso academico y hacer seguimiento.",
+  "estimatedValue": 0,
+  "canEditBeforeReview": false,
   "startDate": "2026-05-15",
   "endDate": "2027-05-15",
   "createdAt": "2026-05-15T12:00:00",
@@ -824,7 +1095,7 @@ currentStatus = FORMALIZADO
 
 ---
 
-## 8.8 Generar preview PDF
+## 8.10 Generar preview PDF
 
 ```http
 POST {{baseUrl}}/api/convenios/{{convenioId}}/preview-pdf
@@ -843,7 +1114,7 @@ PDF de vista previa generado correctamente
 
 ---
 
-## 8.9 Ver preview PDF
+## 8.11 Ver preview PDF
 
 ```http
 GET {{baseUrl}}/api/convenios/{{convenioId}}/preview-pdf
@@ -862,7 +1133,7 @@ Archivo PDF en bytes con Content-Type: application/pdf
 
 ---
 
-## 8.10 Ver PDF oficial de una versión
+## 8.12 Ver PDF oficial de una versión
 
 ```http
 GET {{baseUrl}}/api/convenios/{{convenioId}}/versions/{{versionId}}/pdf
@@ -881,7 +1152,7 @@ Archivo PDF en bytes con Content-Type: application/pdf
 
 ---
 
-## 8.11 Documentos generados del convenio
+## 8.13 Documentos generados del convenio
 
 ```http
 GET {{baseUrl}}/api/convenios/{{convenioId}}/documents
@@ -904,18 +1175,18 @@ No lleva body.
     "documentType": "FINAL_APROBADO",
     "stage": "RECTORIA",
     "fileName": "final-aprobado-CONV-2026-0001.pdf",
-    "url": "storage/convenios/generated/.../archivo.pdf",
+    "url": "convenios/generated/.../archivo.pdf",
     "generatedById": "uuid",
     "generatedByEmail": "antonio.parra@campusucc.edu.co",
     "generatedAt": "2026-05-15T16:30:00",
-    "notes": "Convenio aprobado por Rectoría"
+    "notes": "Convenio aprobado por Rectoria"
   }
 ]
 ```
 
 ---
 
-## 8.12 Descargar PDF generado
+## 8.14 Descargar PDF generado
 
 ```http
 GET {{baseUrl}}/api/convenios/{{convenioId}}/documents/{{generatedDocumentId}}/pdf
@@ -1840,23 +2111,43 @@ Revisión de vencimientos ejecutada correctamente
 
 # 15. Variables de entorno para despliegue
 
-```env
-DB_URL=jdbc:postgresql://HOST:PUERTO/defaultdb?sslmode=require
-DB_USERNAME=usuario
-DB_PASSWORD=password
+No incluir secretos reales en el repositorio ni en documentacion publica. Las claves reales deben quedar solo en Render o en el gestor seguro correspondiente.
 
-JWT_SECRET=clave-larga-segura-minimo-32-caracteres
+```env
+PORT=10000
+
+DB_URL=jdbc:postgresql://HOST_AIVEN:PUERTO/defaultdb?sslmode=require
+DB_USERNAME=USUARIO_AIVEN
+DB_PASSWORD=PASSWORD_AIVEN
+
+JWT_SECRET=CLAVE_LARGA_SEGURA_MINIMO_32_CARACTERES
 JWT_EXPIRATION_MS=86400000
+
+APP_PUBLIC_BASE_URL=https://TU-BACKEND.onrender.com
+APP_SYSTEM_URL=https://c-loop.vercel.app
+APP_COMPANY_UPLOAD_PATH=/api/public/company-upload
+APP_CORS_ALLOWED_ORIGINS=https://c-loop.vercel.app,http://localhost:4200
 
 APP_MAIL_ENABLED=true
 MAIL_USERNAME=correo@gmail.com
 MAIL_PASSWORD=app-password-gmail
 MAIL_FROM=correo@gmail.com
 
-APP_PUBLIC_BASE_URL=https://frontend-angular.onrender.com
-APP_SYSTEM_URL=https://frontend-angular.onrender.com
-APP_COMPANY_UPLOAD_PATH=/empresa/carga
-APP_CORS_ALLOWED_ORIGINS=http://localhost:4200,https://frontend-angular.onrender.com
-
+APP_STORAGE_PROVIDER=supabase
 APP_STORAGE_BASE_PATH=storage
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+SUPABASE_BUCKET=convenios-documents
+SUPABASE_SERVICE_ROLE_KEY=SOLO_EN_RENDER_NO_EN_ANGULAR
+JPA_SHOW_SQL=false
 ```
+
+Notas:
+
+- `APP_PUBLIC_BASE_URL` debe ser la URL publica del backend en Render. Se usa para construir enlaces publicos, por ejemplo carga documental por token.
+- `APP_SYSTEM_URL` debe ser la URL del frontend. En este caso: `https://c-loop.vercel.app`.
+- Angular no debe conectarse directamente a Aiven ni a Supabase. Angular debe consumir solo el backend Spring Boot.
+- `SUPABASE_SERVICE_ROLE_KEY` no debe ir en Angular, README publico ni repositorio. Solo debe configurarse como variable segura en Render.
+- Si se prueba localmente sin Supabase, se puede usar `APP_STORAGE_PROVIDER=local` y `APP_STORAGE_BASE_PATH=storage`.
+
+---
+

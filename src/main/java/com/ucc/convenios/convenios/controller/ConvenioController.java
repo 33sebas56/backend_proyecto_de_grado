@@ -5,6 +5,7 @@ import com.ucc.convenios.convenios.dto.ConvenioResponse;
 import com.ucc.convenios.convenios.dto.ConvenioStatusHistoryResponse;
 import com.ucc.convenios.convenios.dto.ConvenioVersionResponse;
 import com.ucc.convenios.convenios.dto.CreateConvenioRequest;
+import com.ucc.convenios.convenios.dto.UpdateConvenioRequest;
 import com.ucc.convenios.convenios.service.ConvenioService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -33,6 +34,15 @@ public class ConvenioController {
             Authentication authentication
     ) {
         return convenioService.createConvenio(request, authentication);
+    }
+
+    @PutMapping("/{id}")
+    public ConvenioResponse updateConvenioBeforeReview(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateConvenioRequest request,
+            Authentication authentication
+    ) {
+        return convenioService.updateConvenioBeforeReview(id, request, authentication);
     }
 
     @GetMapping

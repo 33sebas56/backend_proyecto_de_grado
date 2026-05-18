@@ -9,6 +9,7 @@ import com.ucc.convenios.convenios.dto.ConvenioResponse;
 import com.ucc.convenios.convenios.dto.ConvenioStatusHistoryResponse;
 import com.ucc.convenios.convenios.dto.ConvenioVersionResponse;
 import com.ucc.convenios.convenios.dto.CreateConvenioRequest;
+import com.ucc.convenios.convenios.dto.UpdateConvenioRequest;
 import com.ucc.convenios.convenios.entity.Convenio;
 import com.ucc.convenios.convenios.entity.ConvenioGeneratedDocument;
 import com.ucc.convenios.convenios.entity.ConvenioStatusHistory;
@@ -37,12 +38,23 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Year;
-import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 public class ConvenioService {
+
+    private static final Set<ConvenioStatus> EDITABLE_BEFORE_REVIEW_STATUSES = Set.of(
+            ConvenioStatus.BORRADOR,
+            ConvenioStatus.EMPRESA_PENDIENTE,
+            ConvenioStatus.PENDIENTE_DOCUMENTOS_EMPRESA,
+            ConvenioStatus.DOCUMENTOS_EMPRESA_RECIBIDOS,
+            ConvenioStatus.DOCUMENTOS_OBSERVADOS_EMPRESA,
+            ConvenioStatus.DOCUMENTOS_APROBADOS,
+            ConvenioStatus.LISTO_PARA_RADICAR
+    );
 
     private final ConvenioRepository convenioRepository;
     private final ConvenioVersionRepository convenioVersionRepository;
@@ -149,9 +161,127 @@ public class ConvenioService {
         return ConvenioResponse.fromEntity(updatedConvenio);
     }
 
+    @Transactional
+    public ConvenioResponse updateConvenioBeforeReview(UUID convenioId, UpdateConvenioRequest request, Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        Convenio convenio = getConvenioForUpdate(convenioId);
+
+        validateCanUpdateConvenioBeforeReview(convenio, currentUser);
+        validateEditableBeforeReview(convenio);
+
+        ConvenioVersion currentVersion = convenio.getCurrentVersion();
+        if (currentVersion == null) {
+            throw new BadRequestException("El convenio no tiene una versión actual para editar");
+        }
+
+        StringBuilder changes = new StringBuilder();
+
+        if (request.getCompanyId() != null && !request.getCompanyId().equals(convenio.getCompany().getId())) {
+            if (convenio.getCurrentStatus() != ConvenioStatus.BORRADOR) {
+                throw new BadRequestException("La empresa solo se puede cambiar mientras el convenio esté en BORRADOR");
+            }
+
+            Company company = companyRepository.findById(request.getCompanyId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Empresa no encontrada"));
+
+            if (company.getStatus() != CompanyStatus.VALIDADA) {
+                throw new BadRequestException("Solo se pueden asociar convenios a empresas validadas");
+            }
+
+            convenio.setCompany(company);
+            appendChange(changes, "empresa");
+        }
+
+        if (request.getConvenioType() != null && request.getConvenioType() != convenio.getConvenioType()) {
+            convenio.setConvenioType(request.getConvenioType());
+            appendChange(changes, "tipo de convenio");
+        }
+
+        if (request.getTitle() != null) {
+            String title = requireText(request.getTitle(), "El título del convenio no puede estar vacío");
+            if (!Objects.equals(currentVersion.getTitle(), title)) {
+                currentVersion.setTitle(title);
+                appendChange(changes, "título");
+            }
+        }
+
+        if (request.getObjective() != null) {
+            String objective = requireText(request.getObjective(), "El objeto del convenio no puede estar vacío");
+            if (!Objects.equals(currentVersion.getObjective(), objective)) {
+                currentVersion.setObjective(objective);
+                appendChange(changes, "objeto");
+            }
+        }
+
+        if (request.getDescription() != null) {
+            String description = normalizeOptionalText(request.getDescription());
+            if (!Objects.equals(currentVersion.getDescription(), description)) {
+                currentVersion.setDescription(description);
+                appendChange(changes, "descripción");
+            }
+        }
+
+        if (request.getDurationMonths() != null) {
+            if (request.getDurationMonths() <= 0) {
+                throw new BadRequestException("La duración del convenio debe ser mayor a 0 meses");
+            }
+
+            if (!Objects.equals(currentVersion.getDurationMonths(), request.getDurationMonths())) {
+                currentVersion.setDurationMonths(request.getDurationMonths());
+                appendChange(changes, "duración");
+            }
+        }
+
+        if (request.getExternalEntityObligations() != null) {
+            String obligations = normalizeOptionalText(request.getExternalEntityObligations());
+            if (!Objects.equals(currentVersion.getExternalEntityObligations(), obligations)) {
+                currentVersion.setExternalEntityObligations(obligations);
+                appendChange(changes, "obligaciones de la empresa");
+            }
+        }
+
+        if (request.getUniversityObligations() != null) {
+            String obligations = normalizeOptionalText(request.getUniversityObligations());
+            if (!Objects.equals(currentVersion.getUniversityObligations(), obligations)) {
+                currentVersion.setUniversityObligations(obligations);
+                appendChange(changes, "obligaciones de la universidad");
+            }
+        }
+
+        if (request.getEstimatedValue() != null) {
+            if (request.getEstimatedValue().signum() < 0) {
+                throw new BadRequestException("El valor estimado no puede ser negativo");
+            }
+
+            if (!Objects.equals(currentVersion.getEstimatedValue(), request.getEstimatedValue())) {
+                currentVersion.setEstimatedValue(request.getEstimatedValue());
+                appendChange(changes, "valor estimado");
+            }
+        }
+
+        if (changes.length() == 0) {
+            return ConvenioResponse.fromEntity(convenio);
+        }
+
+        convenioVersionRepository.save(currentVersion);
+        Convenio savedConvenio = convenioRepository.save(convenio);
+
+        registerStatusHistory(
+                savedConvenio,
+                convenio.getCurrentStatus(),
+                convenio.getCurrentStatus(),
+                convenio.getCurrentStage(),
+                convenio.getCurrentStage(),
+                "Convenio editado antes de enviarse a revisión. Campos ajustados: " + changes,
+                currentUser
+        );
+
+        return ConvenioResponse.fromEntity(savedConvenio);
+    }
+
     @Transactional(readOnly = true)
     public List<ConvenioResponse> findAll() {
-        return convenioRepository.findAll()
+        return convenioRepository.findAllByOrderByUpdatedAtDesc()
                 .stream()
                 .map(ConvenioResponse::fromEntity)
                 .toList();
@@ -373,6 +503,24 @@ public class ConvenioService {
         }
     }
 
+    private void validateCanUpdateConvenioBeforeReview(Convenio convenio, User user) {
+        if (convenio.getCreatedBy().getId().equals(user.getId())) {
+            return;
+        }
+
+        Set<String> allowedRoles = Set.of("ADMIN", "GESTOR_PROYECCION");
+
+        boolean allowed = userRoleRepository.findByUser(user)
+                .stream()
+                .map(UserRole::getRole)
+                .map(Role::getName)
+                .anyMatch(allowedRoles::contains);
+
+        if (!allowed) {
+            throw new BadRequestException("Solo el responsable del convenio, Proyección Social o ADMIN pueden editar el convenio antes de enviarlo a revisión");
+        }
+    }
+
     private void validateCanFormalizeConvenio(User user) {
         Set<String> allowedRoles = Set.of("ADMIN", "GESTOR_PROYECCION");
 
@@ -384,6 +532,12 @@ public class ConvenioService {
 
         if (!allowed) {
             throw new BadRequestException("Solo ADMIN o GESTOR_PROYECCION pueden formalizar convenios");
+        }
+    }
+
+    private void validateEditableBeforeReview(Convenio convenio) {
+        if (!EDITABLE_BEFORE_REVIEW_STATUSES.contains(convenio.getCurrentStatus())) {
+            throw new BadRequestException("El convenio solo se puede editar antes de enviarlo a revisión formal");
         }
     }
 
@@ -411,6 +565,30 @@ public class ConvenioService {
 
         return "Convenio radicado, PDF oficial generado y enviado a Proyección Social. "
                 + "Firmante final esperado en Rectoría: " + rectorSignerLabel;
+    }
+
+    private void appendChange(StringBuilder changes, String fieldName) {
+        if (changes.length() > 0) {
+            changes.append(", ");
+        }
+        changes.append(fieldName);
+    }
+
+    private String requireText(String value, String errorMessage) {
+        String normalized = normalizeOptionalText(value);
+        if (normalized == null) {
+            throw new BadRequestException(errorMessage);
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalText(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private void registerStatusHistory(
@@ -462,7 +640,6 @@ public class ConvenioService {
 
         long count = convenioRepository.count() + 1;
         String sequence = String.format("%04d", count);
-
         String code = prefix + sequence;
 
         while (convenioRepository.existsByCode(code)) {
