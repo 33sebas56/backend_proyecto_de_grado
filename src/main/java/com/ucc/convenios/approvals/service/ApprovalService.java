@@ -33,6 +33,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.List;
@@ -292,7 +293,53 @@ public class ApprovalService {
                 currentUser
         );
 
-        convenioNotificationService.notifyProjectionFormalizationPending(convenio);
+        markConvenioAsRadicadoAndStartValidity(convenio, version, currentUser);
+    }
+
+    private void markConvenioAsRadicadoAndStartValidity(
+            Convenio convenio,
+            ConvenioVersion version,
+            User currentUser
+    ) {
+        Integer durationMonths = version.getDurationMonths();
+
+        if (durationMonths == null || durationMonths <= 0) {
+            throw new BadRequestException("El convenio no tiene una duración válida para iniciar vigencia");
+        }
+
+        ConvenioStatus previousStatus = convenio.getCurrentStatus();
+        ConvenioStage previousStage = convenio.getCurrentStage();
+
+        LocalDate startDate = LocalDate.now();
+        LocalDate endDate = startDate.plusMonths(durationMonths);
+
+        convenio.setStartDate(startDate);
+        convenio.setEndDate(endDate);
+        convenio.setCurrentStatus(ConvenioStatus.RADICADO);
+        convenio.setCurrentStage(null);
+
+        version.setStartDate(startDate);
+        version.setEndDate(endDate);
+
+        convenioVersionRepository.save(version);
+        Convenio savedConvenio = convenioRepository.save(convenio);
+
+        registerStatusHistory(
+                savedConvenio,
+                previousStatus,
+                ConvenioStatus.RADICADO,
+                previousStage,
+                null,
+                "Convenio radicado automáticamente después de quedar aprobado para firma. "
+                        + "Desde esta fecha inicia la vigencia. Fecha de inicio: "
+                        + startDate
+                        + ". Fecha de finalización: "
+                        + endDate
+                        + ". Duración aplicada: "
+                        + durationMonths
+                        + " meses.",
+                currentUser
+        );
     }
 
     private void moveConvenioToCorrection(ApprovalRound round, User currentUser, String comment) {
