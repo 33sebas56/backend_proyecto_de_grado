@@ -293,10 +293,10 @@ public class ApprovalService {
                 currentUser
         );
 
-        markConvenioAsRadicadoAndStartValidity(convenio, version, currentUser);
+        markConvenioAsFormalizadoAndStartValidity(convenio, version, currentUser);
     }
 
-    private void markConvenioAsRadicadoAndStartValidity(
+    private void markConvenioAsFormalizadoAndStartValidity(
             Convenio convenio,
             ConvenioVersion version,
             User currentUser
@@ -315,7 +315,7 @@ public class ApprovalService {
 
         convenio.setStartDate(startDate);
         convenio.setEndDate(endDate);
-        convenio.setCurrentStatus(ConvenioStatus.RADICADO);
+        convenio.setCurrentStatus(ConvenioStatus.FORMALIZADO);
         convenio.setCurrentStage(null);
 
         version.setStartDate(startDate);
@@ -327,10 +327,10 @@ public class ApprovalService {
         registerStatusHistory(
                 savedConvenio,
                 previousStatus,
-                ConvenioStatus.RADICADO,
+                ConvenioStatus.FORMALIZADO,
                 previousStage,
                 null,
-                "Convenio radicado automáticamente después de quedar aprobado para firma. "
+                "Convenio formalizado automáticamente después de quedar aprobado por todas las etapas. "
                         + "Desde esta fecha inicia la vigencia. Fecha de inicio: "
                         + startDate
                         + ". Fecha de finalización: "
